@@ -1,0 +1,6 @@
+/target
+/resources
+Cargo.lock
+/Client/node_modules
+/Client/dist
+/Client/*.lock
