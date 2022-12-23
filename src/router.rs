@@ -36,12 +36,16 @@ struct ScoreBody {
 
 async fn scores(State(state): State<Arc<RwLock<Config>>>) -> Json<ScoreWrapper> {
     let config = state.read().unwrap();
-    let scores = config.teams.iter().map(|(name, team)| ScoreBody {
-        name: name.clone(),
-        score: team.score(),
-        ups: team.scores.iter().map(|s| s.up).collect(),
-    });
     let services = config.services.iter().map(|s| s.name.clone());
+    let scores = config.teams.iter().map(|(name, team)| ScoreBody {
+        name: name.to_owned(),
+        score: team.score(),
+        ups: config
+            .services
+            .iter()
+            .map(|s| team.scores.get(&s.name).unwrap_or(&Score::default()).up)
+            .collect(),
+    });
     Json(ScoreWrapper {
         teams: scores.collect(),
         services: services.collect(),
@@ -61,9 +65,14 @@ async fn team_scores(
     let config = state.read().unwrap();
     if let Some(team) = config.teams.get(&team) {
         let services = config.services.iter().map(|s| s.name.clone());
+        let scores = team
+            .scores
+            .iter()
+            .filter(|(name, _)| config.services.iter().any(|s| &s.name == *name))
+            .map(|(_, score)| score.clone());
         Ok(Json(TeamScore {
             services: services.collect(),
-            scores: team.scores.clone(),
+            scores: scores.collect(),
         }))
     } else {
         Err(StatusCode::NOT_FOUND)

@@ -1,138 +1,29 @@
-use serde::{Deserialize, Serialize};
-use std::collections::{BTreeMap, VecDeque};
-use std::process::{Command, Output};
-use std::sync::{Arc, Mutex};
-use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
-use std::{fs, io};
-
-use crate::password::{
-    get_password_groups, get_passwords, load_password_saves, validate_password_fs, PasswordSave,
-};
-
-#[derive(Serialize, Deserialize, Clone, Default)]
-pub struct Score {
-    pub score: u32,
-    pub up: bool,
-    pub history: VecDeque<bool>,
+mod base;
+mod password;
+mod save;
+pub mod saves {
+    pub use super::save::{get_autosave_names, get_save_names, load_save};
 }
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Service {
-    pub name: String,
-    pub command: String,
-    pub multiplier: u8,
-}
-impl Service {
-    fn new(name: String, command: String) -> Self {
-        Service {
-            name,
-            command,
-            multiplier: 1,
-        }
-    }
-    pub fn is_valid(&self) -> bool {
-        return self.name != "" && self.command != "";
-    }
-    pub fn check_with_env(&self, env: &Vec<(String, String)>) -> io::Result<Output> {
-        // get PATH from env
-        let path = std::env::var("PATH").unwrap_or("/usr/bin:/bin:/usr/sbin:/sbin".to_string());
-        let output = Command::new("sh")
-            .current_dir("./resources")
-            .arg("-c")
-            .arg(&self.command)
-            .env_clear()
-            .env("PATH", path)
-            .envs(env.clone())
-            .output();
-        output
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone)]
-pub struct Team {
-    pub scores: Vec<Score>,
-    pub env: Vec<(String, String)>,
-}
-
-impl Team {
-    pub fn score(&self) -> u32 {
-        self.scores.iter().map(|s| s.score).sum()
-    }
-}
-
-pub enum TeamError {
-    InvalidName,
-    AlreadyExists,
-}
-
-#[derive(Clone, Serialize, Deserialize)]
-pub struct Inject {
-    pub name: String,
-    pub file: String,
-    /// Time when the inject happens in seconds
-    pub start: u32,
-    /// Duration of inject in seconds
-    pub duration: u32,
-    pub side_effects: Option<Vec<SideEffect>>,
-    pub completed: bool,
-}
-
-impl Inject {
-    fn from_yaml(name: String, yaml: YAMLInject) -> Self {
-        Self {
-            name,
-            file: yaml.file,
-            start: yaml.start,
-            duration: yaml.duration,
-            side_effects: yaml.side_effects,
-            completed: false,
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub enum SideEffect {
-    DeleteService(String),
-    AddService(Service),
-    EditService(String, Service),
-}
-
-impl SideEffect {
-    pub fn apply(self, config: &mut Config) {
-        match self {
-            SideEffect::DeleteService(name) => {
-                config.remove_service(&name);
-            }
-            SideEffect::AddService(service) => {
-                config.add_service(service);
-            }
-            SideEffect::EditService(name, service) => {
-                config.edit_service(&name, service);
-            }
-        }
-    }
-}
-
-#[derive(Serialize, Deserialize)]
-struct YAMLInject {
-    file: String,
-    start: u32,
-    duration: u32,
-    side_effects: Option<Vec<SideEffect>>,
-}
-
-fn load_injects() -> Vec<Inject> {
-    let Ok(file) = fs::read_to_string("resources/injects.yaml") else {
-        return Vec::new();
+pub mod passwords {
+    pub use super::password::{
+        get_password_groups, get_passwords, overwrite_passwords, remove_password_group,
+        write_passwords, PasswordSave,
     };
-    let yaml_tree: BTreeMap<String, YAMLInject> =
-        serde_yaml::from_str(&file).expect("injects.yaml is not valid");
-    let injects = yaml_tree
-        .into_iter()
-        .map(|(name, inject)| Inject::from_yaml(name, inject))
-        .collect();
-    injects
 }
+
+use serde::{Deserialize, Serialize};
+use tracing::{info, error};
+use std::collections::BTreeMap;
+
+use std::fmt::Display;
+use std::fs;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, Instant};
+
+use base::*;
+pub use base::{Score, Service, Team, TeamError};
+use password::{load_password_saves, validate_password_fs};
+use save::{autosave, load_save, save_config, validate_save_fs, SaveError};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -163,6 +54,12 @@ impl Config {
         validate_save_fs();
         me
     }
+    pub fn save(&self, file_name: &str) -> Result<(), SaveError> {
+        save_config(self, file_name)
+    }
+    pub fn autosave(&self) -> Result<(), SaveError> {
+        autosave(&self)
+    }
     pub fn from_save(file_name: &str) -> Result<Self, SaveError> {
         let save = load_save(file_name)?;
         load_password_saves(&save.passwords);
@@ -178,7 +75,11 @@ impl Config {
         self.teams.insert(
             name.clone(),
             Team {
-                scores: self.services.iter().map(|_| Score::default()).collect(),
+                scores: self
+                    .services
+                    .iter()
+                    .map(|s| (s.name.to_owned(), Score::default()))
+                    .collect(),
                 env: vec![],
             },
         );
@@ -207,7 +108,11 @@ impl Config {
         self.active = false;
         self.game_time = Duration::from_secs(0);
         for team in self.teams.values_mut() {
-            team.scores = self.services.iter().map(|_| Score::default()).collect();
+            team.scores = self
+                .services
+                .iter()
+                .map(|s| (s.name.to_owned(), Score::default()))
+                .collect();
         }
     }
     pub fn score_tick(&mut self) {
@@ -221,169 +126,105 @@ impl Config {
                 }
             }
             for effect in side_effects {
-                println!("Applying side effect: {:?}", effect);
-                effect.apply(self);
+                info!("Applying side effect: {:?}", effect);
+                if let Err(err) = effect.apply(self) {
+                    error!("Error applying side effect: {:?}", err);
+                }
             }
             score_teams(self);
         }
     }
-    pub fn open_injects(&self) -> Vec<Inject> {
-        let time = (self.run_time().as_secs() / 60) as u32;
-        let injects = self
-            .injects
-            .iter()
-            .filter(|i| i.start >= time)
-            .cloned()
-            .collect();
-        injects
-    }
-    pub fn remove_service(&mut self, name: &str) {
+    pub fn remove_service(&mut self, name: &str) -> Result<(), ConfigError> {
         if let Some(index) = self.services.iter().position(|s| s.name == name) {
             self.services.remove(index);
+            Ok(())
+        } else {
+            Err(ConfigError::DoesNotExist)
+        }
+    }
+    pub fn add_service(&mut self, service: Service) -> Result<(), ConfigError> {
+        if let Some(_) = self.services.iter().find(|s| s.name == service.name) {
+            return Err(ConfigError::AlreadyExists);
+        }
+        if !service.is_valid() {
+            return Err(ConfigError::BadValue);
+        }
+        for team in self.teams.values_mut() {
+            team.scores.insert(service.name.clone(), Score::default());
+        }
+        self.services.push(service);
+        Ok(())
+    }
+    pub fn edit_service(&mut self, name: &str, service: Service) -> Result<(),ConfigError>{
+        if !service.is_valid() {
+            return Err(ConfigError::BadValue);
+        }
+        if service.name != name && self.services.iter().any(|s| s.name == service.name) {
+            return Err(ConfigError::AlreadyExists);
+        }
+        if name != service.name {
             for team in self.teams.values_mut() {
-                team.scores.remove(index);
+                let score = team.scores.remove(name);
+                team.scores.insert(service.name.clone(), score.unwrap_or_default());
             }
         }
-    }
-    pub fn add_service(&mut self, service: Service) {
-        self.services.push(service);
-        for team in self.teams.values_mut() {
-            team.scores.push(Score::default());
-        }
-    }
-    pub fn edit_service(&mut self, name: &str, service: Service) {
         for s in self.services.iter_mut() {
             if s.name == name {
-                *s = service.clone();
+                *s = service;
+                return Ok(());
             }
         }
+        Ok(())
     }
-}
-
-#[derive(Serialize, Deserialize)]
-pub struct Save {
-    #[serde(with = "serde_millis")]
-    pub saved_at: Instant,
-    config: Config,
-    /// Map with the key being the team name and the value being a vector of
-    /// their passwords
-    passwords: BTreeMap<String, Vec<PasswordSave>>,
-}
-
-pub enum SaveError {
-    ReadError,
-    ParseError,
-    WriteError,
-}
-
-pub fn save_config(config: &Config, file_name: &str) -> Result<(), SaveError> {
-    let saved_at = Instant::now();
-    let passwords = config
-        .teams
-        .iter()
-        .filter_map(|(name, _)| {
-            if let Ok(groups) = get_password_groups(&name) {
-                let saves = groups
-                    .iter()
-                    .filter_map(|group| {
-                        if let Ok(passwords) = get_passwords(&name, &group) {
-                            Some(PasswordSave {
-                                group: group.clone(),
-                                passwords,
-                            })
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<PasswordSave>>();
-                Some((name.clone(), saves))
-            } else {
-                None
-            }
-        })
-        .collect();
-    let save = Save {
-        saved_at,
-        config: config.clone(),
-        passwords,
-    };
-    let Ok(file) = fs::File::create(format!("resources/save/{}.json", file_name)) else {
-        println!("Error opening save file");
-        return Err(SaveError::WriteError);
-    };
-    match serde_json::to_writer(file, &save) {
-        Ok(_) => Ok(()),
-        Err(_) => Err(SaveError::ParseError),
-    }
-}
-
-pub fn autosave(config: &Config) -> Result<(), SaveError> {
-    let time = SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .unwrap()
-        .as_secs()
-        / 60
-        % 12;
-    println!("Autosaving to {}", time);
-    save_config(config, format!("autosave/autosave-{}", time).as_str())
-}
-
-pub fn load_save(file_name: &str) -> Result<Save, SaveError> {
-    let Ok(file) = fs::File::open(format!("resources/save/{}.json", file_name)) else {
-        println!("Error opening save file");
-        return Err(SaveError::ReadError);
-    };
-    match serde_json::from_reader(file) {
-        Ok(save) => Ok(save),
-        Err(_) => Err(SaveError::ParseError),
-    }
-}
-
-pub fn get_save_names() -> Vec<String> {
-    let mut names = Vec::new();
-    if let Ok(entries) = fs::read_dir("resources/save") {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(name) = entry.file_name().to_str() {
-                            if name.ends_with(".json") {
-                                names.push(name[0..name.len() - 5].to_string());
-                            }
-                        }
-                    }
+    /// Because there can technically be multiple sources of truth for the config,
+    /// this function will combine the two configs together, with this config
+    /// taking precedence. The other config will try and update this one while respecting
+    /// new services and teams.
+    pub fn smart_combine(&mut self, other: Config) {
+        for (team_name, other_team) in other.teams {
+            self.teams.entry(team_name).and_modify(|team| {
+                for (new_score_name,new_score) in other_team.scores {
+                    team.scores.entry(new_score_name).and_modify(|score| {
+                        *score = new_score;
+                    });
                 }
+            });
+        }
+        // update injects
+        for inject in other.injects {
+            if let Some(index) = self.injects.iter().position(|i| i.name == inject.name) {
+                self.injects[index] = inject;
             }
         }
     }
-    names
 }
 
-pub fn get_autosave_names() -> Vec<String> {
-    let mut names = Vec::new();
-    if let Ok(entries) = fs::read_dir("resources/save/autosave") {
-        for entry in entries {
-            if let Ok(entry) = entry {
-                if let Ok(file_type) = entry.file_type() {
-                    if file_type.is_file() {
-                        if let Some(name) = entry.file_name().to_str() {
-                            if name.ends_with(".json") {
-                                names.push(name[0..name.len() - 5].to_string());
-                            }
-                        }
-                    }
-                }
+impl Display for Config {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        // game time
+        let game_time = self.run_time();
+        let game_time = format!(
+            "{}:{}",
+            game_time.as_secs() / 60,
+            game_time.as_secs() % 60
+        );
+        writeln!(f, "Game time: {}", game_time)?;
+        // teams
+        for (name, team) in self.teams.iter() {
+            writeln!(f, "  {}:", name)?;
+            for (service, score) in team.scores.iter() {
+                writeln!(f, "    {}: {} {}", service, score.up, score.score)?;
             }
-        }
+        };
+        Ok(())
     }
-    names
 }
 
-fn validate_save_fs() {
-    // make sure the save directory exists
-    if let Err(e) = fs::create_dir_all("resources/save/autosave") {
-        println!("Error creating save directory: {}", e);
-    }
+#[derive(Debug)]
+pub enum ConfigError {
+    AlreadyExists,
+    DoesNotExist,
+    BadValue,
 }
 
 fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
@@ -401,7 +242,10 @@ fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
             (
                 name.clone(),
                 Team {
-                    scores: services.iter().map(|_| Score::default()).collect(),
+                    scores: services
+                        .iter()
+                        .map(|s| (s.name.to_owned(), Score::default()))
+                        .collect(),
                     env,
                 },
             )
@@ -452,21 +296,20 @@ fn score_teams(config: &mut Config) {
     });
     let codes = exit_codes.lock().unwrap();
     for (team_name, team_codes) in codes.iter() {
-        config.teams.entry(team_name.clone()).and_modify(|team| {
-            for (i, code) in team_codes.iter().enumerate() {
-                let up = *code;
-                team.scores[i].up = up;
-                if up {
-                    team.scores[i].score += services[i].multiplier as u32;
-                }
-                team.scores[i].history.push_front(up);
-                if team.scores[i].history.len() > 10 {
-                    team.scores[i].history.pop_back();
-                }
-                println!(
-                    "{} {}: {}",
-                    team_name, services[i].name, &team.scores[i].score
-                );
+        config.teams.entry(team_name.to_owned()).and_modify(|team| {
+            for (up, service) in team_codes.iter().zip(services.iter()) {
+                team.scores
+                    .entry(service.name.to_owned())
+                    .and_modify(|score| {
+                        score.up = *up;
+                        if *up {
+                            score.score += service.multiplier as u32;
+                        }
+                        score.history.push_front(*up);
+                        if score.history.len() > 10 {
+                            score.history.pop_back();
+                        }
+                    });
             }
         });
     }

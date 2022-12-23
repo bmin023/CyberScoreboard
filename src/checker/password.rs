@@ -1,6 +1,7 @@
 use std::{str::FromStr, collections::BTreeMap};
 
 use serde::{Serialize, Deserialize};
+use tracing::error;
 
 use crate::checker::Config;
 
@@ -45,20 +46,20 @@ pub struct PasswordSave {
 pub fn load_password_saves(save: &BTreeMap<String,Vec<PasswordSave>>) {
     // clear the PW directory
     if let Err(err) = std::fs::remove_dir_all("./resources/PW") {
-        println!("Error removing directory: {}", err);
+        error!("Error removing directory ./resources/PW: {}", err);
     }
     if let Err(err) = std::fs::create_dir("./resources/PW") {
-        println!("Error creating directory: {}", err);
+        error!("Error creating directory ./resources/PW: {}", err);
     }
 
     for (team,save) in save.iter() {
         // create the team directory
         if let Err(err) = std::fs::create_dir(format!("./resources/PW/{}", team)) {
-            println!("Error creating directory: {}", err);
+            error!("Error creating directory ./resources/PW/{}: {}", team, err);
         }
         for password in save {
             if let Err(err) = write_passwords(team, &password.group, &password.passwords) {
-                println!("Error writing passwords: {:?}", err);
+                error!("Error writing passwords: {:?}", err);
             }
         }
     }
@@ -83,7 +84,7 @@ pub fn validate_password_fs(config: &Config) {
         path.pop();
     }
     let Ok(read_dir) = std::fs::read_dir(&path) else {
-        println!("Error reading directory password directory");
+        error!("Error reading directory password directory");
         return;
     };
     // loop through path, if team doesn't exist, remove it
@@ -92,7 +93,7 @@ pub fn validate_password_fs(config: &Config) {
             if let Some(filename) = entry.file_name().to_str() {
                 if !config.teams.contains_key(filename) {
                     if let Err(err) = std::fs::remove_dir_all(format!("./resources/PW/{}", filename)) {
-                        println!("Error removing directory: {}", err);
+                        error!("Error removing directory: {}", err);
                     }
                 }
             }

@@ -8,9 +8,10 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::{
-    checker::{get_autosave_names, get_save_names, load_save, Config, Score, Service, TeamError},
-    password::{get_password_groups, get_passwords, remove_password_group, write_passwords},
+use crate::checker::{
+    passwords::{get_password_groups, get_passwords, remove_password_group, write_passwords},
+    saves::{get_autosave_names, get_save_names, load_save},
+    Config, ConfigError, Service, TeamError,
 };
 
 pub fn admin_router() -> Router<Arc<RwLock<Config>>> {
@@ -91,14 +92,11 @@ async fn delete_service(
     Path(service): Path<String>,
 ) -> StatusCode {
     let mut config = state.write().unwrap();
-    if let Some(index) = config.services.iter().position(|s| s.name == service) {
-        config.services.remove(index);
-        for team in config.teams.values_mut() {
-            team.scores.remove(index);
-        }
-        StatusCode::OK
-    } else {
-        StatusCode::NOT_FOUND
+    match config.remove_service(&service) {
+        Ok(_) => StatusCode::OK,
+        Err(ConfigError::DoesNotExist) => StatusCode::NOT_FOUND,
+        Err(ConfigError::AlreadyExists) => StatusCode::CONFLICT,
+        Err(ConfigError::BadValue) => StatusCode::BAD_REQUEST,
     }
 }
 
@@ -151,14 +149,11 @@ async fn add_service(
         return StatusCode::BAD_REQUEST;
     }
     let mut config = state.write().unwrap();
-    if config.services.iter().any(|s| s.name == payload.name) {
-        StatusCode::CONFLICT
-    } else {
-        config.services.push(payload);
-        for team in config.teams.values_mut() {
-            team.scores.push(Score::default());
-        }
-        StatusCode::OK
+    match config.add_service(payload) {
+        Ok(_) => StatusCode::OK,
+        Err(ConfigError::AlreadyExists) => StatusCode::CONFLICT,
+        Err(ConfigError::BadValue) => StatusCode::BAD_REQUEST,
+        _ => StatusCode::INTERNAL_SERVER_ERROR,
     }
 }
 
