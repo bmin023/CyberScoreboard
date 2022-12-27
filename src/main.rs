@@ -22,7 +22,7 @@ pub type ConfigState = Arc<RwLock<Config>>;
 async fn main() {
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_default_env()
+            tracing_subscriber::EnvFilter::try_from_env("LOG")
                 .unwrap_or_else(|_| "scoreboard=trace,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
