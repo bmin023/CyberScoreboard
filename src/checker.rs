@@ -2,7 +2,7 @@ mod base;
 mod password;
 mod save;
 pub mod saves {
-    pub use super::save::{get_autosave_names, get_save_names, load_save};
+    pub use super::save::{get_autosave_names, get_save_names, load_save,SaveError};
 }
 pub mod passwords {
     pub use super::password::{
@@ -12,8 +12,8 @@ pub mod passwords {
 }
 
 use serde::{Deserialize, Serialize};
-use tracing::{info, error};
 use std::collections::BTreeMap;
+use tracing::{debug, error, info};
 
 use std::fmt::Display;
 use std::fs;
@@ -35,6 +35,8 @@ pub struct Config {
     last_start: Instant,
     #[serde(with = "serde_millis")]
     game_time: Duration,
+    // #[serde(skip)]
+    // to_delete: Vec<String>,
 }
 
 impl Config {
@@ -49,6 +51,7 @@ impl Config {
             active: true,
             last_start: Instant::now(),
             game_time: Duration::from_secs(0),
+            // to_delete: vec![],
         };
         validate_password_fs(&me);
         validate_save_fs();
@@ -61,8 +64,9 @@ impl Config {
         autosave(&self)
     }
     pub fn from_save(file_name: &str) -> Result<Self, SaveError> {
-        let save = load_save(file_name)?;
+        let mut save = load_save(file_name)?;
         load_password_saves(&save.passwords);
+        save.config.active = false;
         Ok(save.config)
     }
     pub fn add_team(&mut self, name: String) -> Result<(), TeamError> {
@@ -115,24 +119,24 @@ impl Config {
                 .collect();
         }
     }
-    pub fn score_tick(&mut self) {
-        if self.active {
-            let mut side_effects = Vec::new();
-            let time = (self.run_time().as_secs() / 60) as u32;
-            for inject in self.injects.iter_mut().filter(|i| !i.completed) {
-                if time >= inject.start + inject.duration {
-                    inject.completed = true;
-                    side_effects.extend(inject.side_effects.clone().unwrap_or_default());
-                }
+    pub fn inject_tick(&mut self) {
+        let mut side_effects = Vec::new();
+        let time = (self.run_time().as_secs() / 60) as u32;
+        for inject in self.injects.iter_mut().filter(|i| !i.completed) {
+            if time >= inject.start + inject.duration {
+                inject.completed = true;
+                side_effects.extend(inject.side_effects.clone().unwrap_or_default());
             }
-            for effect in side_effects {
-                info!("Applying side effect: {:?}", effect);
-                if let Err(err) = effect.apply(self) {
-                    error!("Error applying side effect: {:?}", err);
-                }
-            }
-            score_teams(self);
         }
+        for effect in side_effects {
+            info!("Applying side effect: {:?}", effect);
+            if let Err(err) = effect.apply(self) {
+                error!("Error applying side effect: {:?}", err);
+            }
+        }
+    }
+    pub fn score_tick(&mut self) {
+        score_teams(self);
     }
     pub fn remove_service(&mut self, name: &str) -> Result<(), ConfigError> {
         if let Some(index) = self.services.iter().position(|s| s.name == name) {
@@ -155,7 +159,7 @@ impl Config {
         self.services.push(service);
         Ok(())
     }
-    pub fn edit_service(&mut self, name: &str, service: Service) -> Result<(),ConfigError>{
+    pub fn edit_service(&mut self, name: &str, service: Service) -> Result<(), ConfigError> {
         if !service.is_valid() {
             return Err(ConfigError::BadValue);
         }
@@ -165,7 +169,9 @@ impl Config {
         if name != service.name {
             for team in self.teams.values_mut() {
                 let score = team.scores.remove(name);
-                team.scores.insert(service.name.clone(), score.unwrap_or_default());
+                team.scores
+                    .insert(service.name.clone(), score.unwrap_or_default());
+                // self.to_delete.push(name.to_owned());
             }
         }
         for s in self.services.iter_mut() {
@@ -180,20 +186,26 @@ impl Config {
     /// this function will combine the two configs together, with this config
     /// taking precedence. The other config will try and update this one while respecting
     /// new services and teams.
+    #[tracing::instrument(skip(self, other))]
     pub fn smart_combine(&mut self, other: Config) {
         for (team_name, other_team) in other.teams {
             self.teams.entry(team_name).and_modify(|team| {
-                for (new_score_name,new_score) in other_team.scores {
-                    team.scores.entry(new_score_name).and_modify(|score| {
-                        *score = new_score;
-                    });
+                for (new_score_name, new_score) in other_team.scores {
+                    if team.scores.contains_key(&new_score_name)
+                    // || !self.to_delete.contains(&new_score_name)
+                    {
+                        team.scores.insert(new_score_name, new_score);
+                    }
                 }
             });
         }
+        // self.to_delete.clear();
         // update injects
         for inject in other.injects {
             if let Some(index) = self.injects.iter().position(|i| i.name == inject.name) {
                 self.injects[index] = inject;
+            } else {
+                debug!("Couldn't resolve inject: {}", inject.name);
             }
         }
     }
@@ -203,11 +215,7 @@ impl Display for Config {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         // game time
         let game_time = self.run_time();
-        let game_time = format!(
-            "{}:{}",
-            game_time.as_secs() / 60,
-            game_time.as_secs() % 60
-        );
+        let game_time = format!("{}:{}", game_time.as_secs() / 60, game_time.as_secs() % 60);
         writeln!(f, "Game time: {}", game_time)?;
         // teams
         for (name, team) in self.teams.iter() {
@@ -215,7 +223,7 @@ impl Display for Config {
             for (service, score) in team.scores.iter() {
                 writeln!(f, "    {}: {} {}", service, score.up, score.score)?;
             }
-        };
+        }
         Ok(())
     }
 }

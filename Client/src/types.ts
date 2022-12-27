@@ -67,3 +67,7 @@ export interface SaveWrapper {
     saves: SaveBody[],
     autosaves: SaveBody[]
 }
+
+export interface SavePayload {
+    name: string,
+}

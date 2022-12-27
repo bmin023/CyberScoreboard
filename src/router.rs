@@ -1,8 +1,6 @@
 mod admin;
 mod team;
 
-use std::sync::{Arc, RwLock};
-
 use axum::{
     extract::{Path, State},
     http::StatusCode,
@@ -11,9 +9,9 @@ use axum::{
 };
 use serde::Serialize;
 
-use crate::checker::{Config, Score};
+use crate::{ConfigState, checker::Score};
 
-pub fn main_router() -> Router<Arc<RwLock<Config>>> {
+pub fn main_router() -> Router<ConfigState> {
     Router::new()
         .nest("/admin", admin::admin_router())
         .nest("/team", team::team_router())
@@ -34,7 +32,7 @@ struct ScoreBody {
     ups: Vec<bool>,
 }
 
-async fn scores(State(state): State<Arc<RwLock<Config>>>) -> Json<ScoreWrapper> {
+async fn scores(State(state): State<ConfigState>) -> Json<ScoreWrapper> {
     let config = state.read().unwrap();
     let services = config.services.iter().map(|s| s.name.clone());
     let scores = config.teams.iter().map(|(name, team)| ScoreBody {
@@ -59,7 +57,7 @@ struct TeamScore {
 }
 
 async fn team_scores(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path(team): Path<String>,
 ) -> Result<Json<TeamScore>, StatusCode> {
     let config = state.read().unwrap();

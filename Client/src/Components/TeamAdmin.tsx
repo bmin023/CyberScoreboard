@@ -70,7 +70,9 @@ interface ITeamDisplayProps {
 
 const PasswordDisplay: React.FC<{ team: string }> = ({ team }) => {
   const { passwords, passwordsError, passwordsLoading } =
-    useAdminPasswords(team);
+    useAdminPasswords(team, (data) => {
+      setSaved(true)
+    });
   const { writePasswords } = useWritePasswords(team);
   const { deletePasswords } = useDeletePasswords(team);
   const [group, setGroup] = useState("");

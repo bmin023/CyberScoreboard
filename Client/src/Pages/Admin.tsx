@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import NaiveShrinker from "../Components/NaiveShrinker";
 import { Shrinker } from "../Components/Shrinker";
 import Teams from "../Components/TeamAdmin";
@@ -7,7 +7,9 @@ import {
   useAdminInfo,
   useDeleteService,
   useEditService,
+  useLoadSave,
   useResetScores,
+  useSaveData,
   useSaves,
   useStartGame,
   useStopGame,
@@ -221,14 +223,25 @@ const Controls: React.FC<IControlsProps> = ({ active }) => {
 
 const Saves = () => {
   const { saves, savesLoading, savesError } = useSaves();
+  const { loadSave } = useLoadSave();
+  const { saveData } = useSaveData();
+  const inputRef = useRef<HTMLInputElement>();
   const [selected, setSelected] = useState<string | null>(null);
   if (savesLoading) return <div>Loading...</div>;
   if (savesError) return <div>We encountered an error. Probably Server.</div>;
 
-  const buttonStyle = (name: string) => 
-    name === selected ? "bg-slate-200 p-1 rounded-md w-full shadow"
-                      : "bg-slate-200 p-1 rounded-md w-full shadow opacity-50";
+  const buttonStyle = (name: string) =>
+    name === selected
+      ? "bg-slate-200 p-1 rounded-md w-full my-0.5 shadow-md"
+      : "bg-slate-200 p-1 rounded-md w-full my-0.5 shadow-md opacity-50";
 
+  const canLoad = (save: string) => {
+    return (
+      saves.saves.map((v) => v.name).includes(save) ||
+      saves.autosaves.map((v) => v.name).includes(save)
+    );
+  }
+  
   return (
     <div className="p-2 bg-slate-300 m-4 rounded-sm shadow-md pb-1 dark:bg-zinc-800">
       <h2 className="text-2xl text-center font-bold">Saves</h2>
@@ -258,16 +271,29 @@ const Saves = () => {
           >
             {save.name}{" "}
             <span className="font-light text-sm">
-              {formatDate(new Date(save.timestamp))}
+              {new Date(save.timestamp).toLocaleString()}
             </span>
           </button>
         ))}
       </div>
-      {selected && (
-        <button className="w-full bg-slate-100 my-2 p-2 rounded shadow-lg font-medium">
+      {selected && canLoad(selected) && (
+        <button
+          onClick={() => loadSave({ name: selected })}
+          className="w-full bg-slate-100 mt-2 p-2 rounded shadow-lg font-medium"
+        >
           Load {selected}
         </button>
       )}
+      <div className="flex mt-2">
+        <input
+          className="flex-grow p-2 rounded bg-slate-100 shadow-lg"
+          value={selected ? selected : ""}
+          onChange={(e) => setSelected(e.target.value)}
+        />
+        <button onClick={()=>saveData({name:(selected?selected:"unknown")})} className="ml-2 w-14 bg-slate-200 p-2 rounded shadow-lg">
+          Save
+        </button>
+      </div>
     </div>
   );
 };

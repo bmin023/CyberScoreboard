@@ -1,4 +1,4 @@
-use std::{time::{Instant, SystemTime, UNIX_EPOCH}, collections::BTreeMap, fs};
+use std::{time::{SystemTime, UNIX_EPOCH}, collections::BTreeMap, fs};
 
 use serde::{Serialize, Deserialize};
 use tracing::error;
@@ -9,8 +9,7 @@ use super::Config;
 
 #[derive(Serialize, Deserialize)]
 pub struct Save {
-    #[serde(with = "serde_millis")]
-    pub saved_at: Instant,
+    pub saved_at: u128,
     pub config: Config,
     /// Map with the key being the team name and the value being a vector of
     /// their passwords
@@ -22,10 +21,13 @@ pub enum SaveError {
     ReadError,
     ParseError,
     WriteError,
+    InternalError
 }
 
 pub fn save_config(config: &Config, file_name: &str) -> Result<(), SaveError> {
-    let saved_at = Instant::now();
+    let Ok(saved_at) = SystemTime::now().duration_since(UNIX_EPOCH) else {
+        return Err(SaveError::InternalError);
+    };
     let passwords = config
         .teams
         .iter()
@@ -51,7 +53,7 @@ pub fn save_config(config: &Config, file_name: &str) -> Result<(), SaveError> {
         })
         .collect();
     let save = Save {
-        saved_at,
+        saved_at: saved_at.as_millis(),
         config: config.clone(),
         passwords,
     };

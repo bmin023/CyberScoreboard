@@ -1,4 +1,4 @@
-use std::{sync::{Arc, RwLock}, time::Instant};
+use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
     extract::{Path, State},
@@ -8,13 +8,12 @@ use axum::{
 };
 use serde::{Deserialize, Serialize};
 
-use crate::checker::{
-    passwords::{get_password_groups, get_passwords, remove_password_group, write_passwords},
-    saves::{get_autosave_names, get_save_names, load_save},
-    Config, ConfigError, Service, TeamError,
+use crate::{
+    checker::{passwords, saves, Config, ConfigError, Service, TeamError},
+    ConfigState,
 };
 
-pub fn admin_router() -> Router<Arc<RwLock<Config>>> {
+pub fn admin_router() -> Router<ConfigState> {
     Router::new()
         .route("/config", get(admin_info))
         .route(
@@ -34,7 +33,8 @@ pub fn admin_router() -> Router<Arc<RwLock<Config>>> {
         .route("/start", post(start_game))
         .route("/stop", post(stop_game))
         .route("/reset", post(reset_scores))
-        .route("/saves", get(get_saves))
+        .route("/saves", get(get_saves).post(save))
+        .route("/saves/load", post(load_save))
 }
 
 #[derive(Serialize)]
@@ -51,7 +51,7 @@ struct AdminInfo {
 }
 
 /// GET the admin config
-async fn admin_info(State(state): State<Arc<RwLock<Config>>>) -> Json<AdminInfo> {
+async fn admin_info(State(state): State<ConfigState>) -> Json<AdminInfo> {
     let config = state.read().unwrap();
     let teams = config.teams.iter().map(|(name, team)| AdminTeam {
         name: name.clone(),
@@ -67,7 +67,7 @@ async fn admin_info(State(state): State<Arc<RwLock<Config>>>) -> Json<AdminInfo>
 /// POST to edit a service.
 /// The Service must not have empty fields and the name must be unique.
 async fn edit_service(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path(service): Path<String>,
     Json(payload): Json<Service>,
 ) -> StatusCode {
@@ -88,7 +88,7 @@ async fn edit_service(
 
 /// DELETE a service.
 async fn delete_service(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path(service): Path<String>,
 ) -> StatusCode {
     let mut config = state.write().unwrap();
@@ -110,7 +110,7 @@ struct TestResult {
 
 /// GET a test run of a service against all teams
 async fn test_service(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path(service): Path<String>,
 ) -> Result<Json<Vec<TestResult>>, StatusCode> {
     let config = state.read().unwrap();
@@ -141,10 +141,7 @@ async fn test_service(
 
 /// POST to add a service.
 /// The Service must not have empty fields and the name must be unique.
-async fn add_service(
-    State(state): State<Arc<RwLock<Config>>>,
-    Json(payload): Json<Service>,
-) -> StatusCode {
+async fn add_service(State(state): State<ConfigState>, Json(payload): Json<Service>) -> StatusCode {
     if !payload.is_valid() {
         return StatusCode::BAD_REQUEST;
     }
@@ -172,7 +169,7 @@ impl EnvPayload {
 /// POST to edit an environment variable.
 /// The Env Variable must not have empty fields and the name must be unique.
 async fn edit_env(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path((team, env)): Path<(String, String)>,
     Json(payload): Json<EnvPayload>,
 ) -> StatusCode {
@@ -195,7 +192,7 @@ async fn edit_env(
 
 /// DELETE an environment variable.
 async fn delete_env(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path((team, env)): Path<(String, String)>,
 ) -> StatusCode {
     let mut config = state.write().unwrap();
@@ -214,7 +211,7 @@ async fn delete_env(
 /// POST to add an environment variable.
 /// The Env Variable must not have empty fields and the name must be unique.
 async fn add_env(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path(team): Path<String>,
     Json(payload): Json<EnvPayload>,
 ) -> StatusCode {
@@ -242,7 +239,7 @@ struct TeamPayload {
 
 /// POST to edit the name of a team
 async fn edit_team(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Path(team_name): Path<String>,
     Json(payload): Json<TeamPayload>,
 ) -> StatusCode {
@@ -259,10 +256,7 @@ async fn edit_team(
 }
 
 /// DELETE a team
-async fn delete_team(
-    State(state): State<Arc<RwLock<Config>>>,
-    Path(team): Path<String>,
-) -> StatusCode {
+async fn delete_team(State(state): State<ConfigState>, Path(team): Path<String>) -> StatusCode {
     let mut config = state.write().unwrap();
     if config.teams.remove(&team).is_some() {
         StatusCode::OK
@@ -273,7 +267,7 @@ async fn delete_team(
 
 /// POST to add a team
 async fn add_team(
-    State(state): State<Arc<RwLock<Config>>>,
+    State(state): State<ConfigState>,
     Json(payload): Json<TeamPayload>,
 ) -> StatusCode {
     let mut config = state.write().unwrap();
@@ -284,19 +278,19 @@ async fn add_team(
     }
 }
 
-async fn stop_game(State(state): State<Arc<RwLock<Config>>>) -> StatusCode {
+async fn stop_game(State(state): State<ConfigState>) -> StatusCode {
     let mut config = state.write().unwrap();
     config.stop();
     StatusCode::OK
 }
 
-async fn start_game(State(state): State<Arc<RwLock<Config>>>) -> StatusCode {
+async fn start_game(State(state): State<ConfigState>) -> StatusCode {
     let mut config = state.write().unwrap();
     config.start();
     StatusCode::OK
 }
 
-async fn reset_scores(State(state): State<Arc<RwLock<Config>>>) -> StatusCode {
+async fn reset_scores(State(state): State<ConfigState>) -> StatusCode {
     let mut config = state.write().unwrap();
     config.reset_scores();
     StatusCode::OK
@@ -311,12 +305,12 @@ struct PasswordBody {
 async fn get_team_passwords(
     Path(team): Path<String>,
 ) -> Result<Json<Vec<PasswordBody>>, StatusCode> {
-    let Ok(groups) = get_password_groups(&team) else {
+    let Ok(groups) = passwords::get_password_groups(&team) else {
         return Err(StatusCode::NOT_FOUND);
     };
     let body = groups
         .iter()
-        .filter_map(|group| match get_passwords(&team, group) {
+        .filter_map(|group| match passwords::get_passwords(&team, group) {
             Ok(passwords) => Some(PasswordBody {
                 group: group.clone(),
                 passwords: passwords.clone(),
@@ -336,14 +330,14 @@ async fn set_passwords(
     Path((team, group)): Path<(String, String)>,
     Json(payload): Json<PasswordPayload>,
 ) -> StatusCode {
-    match write_passwords(&team, &group, &payload.passwords) {
+    match passwords::write_passwords(&team, &group, &payload.passwords) {
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::NOT_FOUND,
     }
 }
 
 async fn delete_passwords(Path((team, group)): Path<(String, String)>) -> StatusCode {
-    match remove_password_group(&team, &group) {
+    match passwords::remove_password_group(&team, &group) {
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::NOT_FOUND,
     }
@@ -352,8 +346,7 @@ async fn delete_passwords(Path((team, group)): Path<(String, String)>) -> Status
 #[derive(Serialize)]
 struct SaveBody {
     name: String,
-    #[serde(with = "serde_millis")]
-    timestamp: Instant,
+    timestamp: u128,
 }
 
 #[derive(Serialize)]
@@ -362,14 +355,18 @@ struct SavesWrapper {
     autosaves: Vec<SaveBody>,
 }
 
+#[tracing::instrument]
 async fn get_saves() -> Json<SavesWrapper> {
-    let saves = get_save_names()
+    let saves = saves::get_save_names()
         .iter()
         .map(|name| {
-            let timestamp = if let Ok(save) = load_save(name) {
+            let timestamp = if let Ok(save) = saves::load_save(name) {
                 save.saved_at
             } else {
-                Instant::now()
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
             };
             SaveBody {
                 name: name.clone(),
@@ -377,17 +374,45 @@ async fn get_saves() -> Json<SavesWrapper> {
             }
         })
         .collect();
-    let autosaves = get_autosave_names()
+    let autosaves = saves::get_autosave_names()
         .iter()
         .map(|name| {
             let name = "autosave/".to_owned() + name;
-            let timestamp = if let Ok(save) = load_save(&name) {
+            let timestamp = if let Ok(save) = saves::load_save(&name) {
                 save.saved_at
             } else {
-                Instant::now()
+                SystemTime::now()
+                    .duration_since(UNIX_EPOCH)
+                    .unwrap_or_default()
+                    .as_millis()
             };
             SaveBody { name, timestamp }
         })
         .collect();
     Json(SavesWrapper { saves, autosaves })
+}
+
+#[derive(Deserialize)]
+struct SavePayload {
+    name: String,
+}
+
+async fn save(State(state): State<ConfigState>, Json(payload): Json<SavePayload>) -> StatusCode {
+    let config = state.read().unwrap();
+    match config.save(payload.name.as_str()) {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
+    }
+}
+
+async fn load_save(
+    State(state): State<ConfigState>,
+    Json(payload): Json<SavePayload>,
+) -> StatusCode {
+    let mut old_config = state.write().unwrap();
+    let Ok(config) = Config::from_save(&payload.name) else {
+        return StatusCode::INTERNAL_SERVER_ERROR;
+    };
+    *old_config = config;
+    StatusCode::OK
 }

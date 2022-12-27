@@ -1,5 +1,3 @@
-use std::sync::{Arc, RwLock};
-
 use axum::{
     extract::Path,
     http::StatusCode,
@@ -9,11 +7,10 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    checker::passwords::{get_password_groups, overwrite_passwords},
-    checker::Config,
+    checker::passwords::{get_password_groups, overwrite_passwords}, ConfigState,
 };
 
-pub fn team_router() -> Router<Arc<RwLock<Config>>> {
+pub fn team_router() -> Router<ConfigState> {
     Router::new()
         .route("/:team/passwords", get(get_team_pw))
         .route("/:team/passwords/:group", post(set_pw))

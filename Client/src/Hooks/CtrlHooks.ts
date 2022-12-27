@@ -1,6 +1,18 @@
 import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "react-query";
-import { AdminInfo, EnvPayload, PasswordBody, PasswordPayload, SaveWrapper, ScoreWrapper, Service, TeamPayload, TeamScore, TestResult } from "../types";
+import {
+  AdminInfo,
+  EnvPayload,
+  PasswordBody,
+  PasswordPayload,
+  SavePayload,
+  SaveWrapper,
+  ScoreWrapper,
+  Service,
+  TeamPayload,
+  TeamScore,
+  TestResult,
+} from "../types";
 
 const SCORE_REFETCH = 5000;
 
@@ -74,7 +86,7 @@ export const useEditService = (service: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async (newService: Service) => {
-      const res = await axios.post("/admin/service/"+service, newService);
+      const res = await axios.post("/admin/service/" + service, newService);
       return res.data;
     },
     {
@@ -88,13 +100,13 @@ export const useEditService = (service: string) => {
     editServiceLoading: isLoading,
     editServiceError: error,
   };
-}
+};
 
 export const useDeleteService = (service: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async () => {
-      const res = await axios.delete("/admin/service/"+service);
+      const res = await axios.delete("/admin/service/" + service);
       return res.data;
     },
     {
@@ -108,7 +120,7 @@ export const useDeleteService = (service: string) => {
     deleteServiceLoading: isLoading,
     deleteServiceError: error,
   };
-}
+};
 
 export const useAddService = () => {
   const queryClient = useQueryClient();
@@ -128,23 +140,26 @@ export const useAddService = () => {
     addServiceLoading: isLoading,
     addServiceError: error,
   };
-}
+};
 
 export const useTestService = (service: string) => {
   // make it not trigger on mount and don't refetch
   // wait for user to click test
-  const { refetch, data, isLoading, isError, dataUpdatedAt } = useQuery(["test", service], async () => {
-    const res = await axios.get("/admin/service/"+service);
-    return res.data;
-  },
-  {
-    enabled: false,
-    refetchOnWindowFocus: false,
-    refetchOnMount: false,
-    refetchOnReconnect: false,
-    refetchInterval: false,
-    placeholderData: []
-  });
+  const { refetch, data, isLoading, isError, dataUpdatedAt } = useQuery(
+    ["test", service],
+    async () => {
+      const res = await axios.get("/admin/service/" + service);
+      return res.data;
+    },
+    {
+      enabled: false,
+      refetchOnWindowFocus: false,
+      refetchOnMount: false,
+      refetchOnReconnect: false,
+      refetchInterval: false,
+      placeholderData: [],
+    }
+  );
   return {
     testService: refetch,
     testServiceData: data as TestResult[],
@@ -152,13 +167,16 @@ export const useTestService = (service: string) => {
     testServiceLoading: isLoading,
     testServiceError: isError,
   };
-}
+};
 
 export const useEditEnv = (team: string, env: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async (newEnv: EnvPayload) => {
-      const res = await axios.post("/admin/team/"+team+"/env/"+env, newEnv);
+      const res = await axios.post(
+        "/admin/team/" + team + "/env/" + env,
+        newEnv
+      );
       return res.data;
     },
     {
@@ -172,13 +190,13 @@ export const useEditEnv = (team: string, env: string) => {
     editEnvLoading: isLoading,
     editEnvError: error,
   };
-}
+};
 
 export const useDeleteEnv = (team: string, env: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async () => {
-      const res = await axios.delete("/admin/team/"+team+"/env/"+env);
+      const res = await axios.delete("/admin/team/" + team + "/env/" + env);
       return res.data;
     },
     {
@@ -192,13 +210,13 @@ export const useDeleteEnv = (team: string, env: string) => {
     deleteEnvLoading: isLoading,
     deleteEnvError: error,
   };
-}
+};
 
 export const useAddEnv = (team: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async (newEnv: EnvPayload) => {
-      const res = await axios.post("/admin/team/"+team+"/env", newEnv);
+      const res = await axios.post("/admin/team/" + team + "/env", newEnv);
       return res.data;
     },
     {
@@ -212,13 +230,13 @@ export const useAddEnv = (team: string) => {
     addEnvLoading: isLoading,
     addEnvError: error,
   };
-}
+};
 
 export const useEditTeam = (team: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async (newTeam: TeamPayload) => {
-      const res = await axios.post("/admin/team/"+team, newTeam);
+      const res = await axios.post("/admin/team/" + team, newTeam);
       return res.data;
     },
     {
@@ -232,13 +250,13 @@ export const useEditTeam = (team: string) => {
     editTeamLoading: isLoading,
     editTeamError: error,
   };
-}
+};
 
 export const useDeleteTeam = (team: string) => {
   const queryClient = useQueryClient();
   const { mutate, isLoading, error } = useMutation(
     async () => {
-      const res = await axios.delete("/admin/team/"+team);
+      const res = await axios.delete("/admin/team/" + team);
       return res.data;
     },
     {
@@ -252,7 +270,7 @@ export const useDeleteTeam = (team: string) => {
     deleteTeamLoading: isLoading,
     deleteTeamError: error,
   };
-}
+};
 
 export const useAddTeam = () => {
   const queryClient = useQueryClient();
@@ -272,7 +290,7 @@ export const useAddTeam = () => {
     addTeamLoading: isLoading,
     addTeamError: error,
   };
-}
+};
 
 export const useStopGame = () => {
   const queryClient = useQueryClient();
@@ -289,8 +307,8 @@ export const useStopGame = () => {
   );
   return {
     stopGame: mutate,
-  }
-}
+  };
+};
 
 export const useStartGame = () => {
   const queryClient = useQueryClient();
@@ -307,8 +325,8 @@ export const useStartGame = () => {
   );
   return {
     startGame: mutate,
-  }
-}
+  };
+};
 
 export const useResetScores = () => {
   const queryClient = useQueryClient();
@@ -325,70 +343,92 @@ export const useResetScores = () => {
   );
   return {
     resetScores: mutate,
-  }
-}
+  };
+};
 
 export const useTeamPasswordGroups = (team: string | undefined) => {
-  if(team === undefined) return { groups: [], groupsLoading: false, groupsError: true, };
-  const { data, isLoading, error } = useQuery([team,"passgroups"], async () => {
-    const res = await axios.get("/team/" + team + "/passwords");
-    return res.data;
-  });
+  if (team === undefined)
+    return { groups: [], groupsLoading: false, groupsError: true };
+  const { data, isLoading, error } = useQuery(
+    [team, "passgroups"],
+    async () => {
+      const res = await axios.get("/team/" + team + "/passwords");
+      return res.data;
+    }
+  );
   return {
     groups: data as string[],
     groupsLoading: isLoading,
     groupsError: error,
   };
-}
+};
 
-export const useOverwritePasswords = (team: string | undefined) => { 
-  if (team === undefined) return { overwritePasswords: () => { } }
+export const useOverwritePasswords = (team: string | undefined) => {
+  if (team === undefined) return { overwritePasswords: () => {} };
   const { mutate } = useMutation(
-    async ({ passwords, group }: {
-      passwords: PasswordPayload,
-      group: string,
+    async ({
+      passwords,
+      group,
+    }: {
+      passwords: PasswordPayload;
+      group: string;
     }) => {
-      const res = await axios.post("/team/" + team + "/passwords/" + group, passwords);
+      const res = await axios.post(
+        "/team/" + team + "/passwords/" + group,
+        passwords
+      );
       return res.data;
     }
   );
   return {
     overwritePasswords: mutate,
-  }
-}
+  };
+};
 
-export const useAdminPasswords = (team: string) => {
-  const { data, isLoading, error } = useQuery([team,"adminPasswords"], async () => {
-    const res = await axios.get(`/admin/team/${team}/passwords`);
-    return res.data;
-  });
+export const useAdminPasswords = (team: string, onRefetch: (data:PasswordBody[])=>void) => {
+  const { data, isLoading, error } = useQuery(
+    ["adminPasswords", team],
+    async () => {
+      const res = await axios.get(`/admin/team/${team}/passwords`);
+      return res.data;
+    }, {
+      onSuccess: (data) => onRefetch(data as PasswordBody[]),
+      refetchInterval: Infinity,
+    }
+  );
   return {
     passwords: data as PasswordBody[],
     passwordsLoading: isLoading,
     passwordsError: error,
   };
-}
+};
 
 export const useWritePasswords = (team: string) => {
   const queryClient = useQueryClient();
   const { mutate } = useMutation(
-    async ({ passwords, group }: {
-      passwords: PasswordPayload,
-      group: string,
+    async ({
+      passwords,
+      group,
+    }: {
+      passwords: PasswordPayload;
+      group: string;
     }) => {
-      const res = await axios.post(`/admin/team/${team}/passwords/${group}`, passwords);
+      const res = await axios.post(
+        `/admin/team/${team}/passwords/${group}`,
+        passwords
+      );
       return res.data;
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries([team,"adminPasswords"]);
-      }
+        queryClient.invalidateQueries(["adminPasswords", team]);
+      },
     }
   );
   return {
     writePasswords: mutate,
   };
-}
+};
 
 export const useDeletePasswords = (team: string) => {
   const queryClient = useQueryClient();
@@ -399,14 +439,14 @@ export const useDeletePasswords = (team: string) => {
     },
     {
       onSuccess: () => {
-        queryClient.invalidateQueries([team,"adminPasswords"]);
-      }
+        queryClient.invalidateQueries(["adminPasswords", team]);
+      },
     }
   );
   return {
     deletePasswords: mutate,
   };
-}
+};
 
 export const useSaves = () => {
   const { data, isLoading, error } = useQuery("saves", async () => {
@@ -418,4 +458,42 @@ export const useSaves = () => {
     savesLoading: isLoading,
     savesError: error,
   };
-}
+};
+
+export const useLoadSave = () => {
+  const queryClient = useQueryClient();
+  const { mutate } = useMutation(
+    async (save: SavePayload) => {
+      const res = await axios.post("/admin/saves/load", save);
+      return res.data;
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries("adminInfo");
+        queryClient.invalidateQueries(["adminPasswords"]);
+        queryClient.invalidateQueries({queryKey:["adminPasswords"]})
+      },
+    }
+  );
+  return {
+    loadSave: mutate,
+  };
+};
+
+export const useSaveData = () => {
+  const queryClient = useQueryClient();
+  const { mutate } = useMutation(
+    async (save: SavePayload) => {
+      const res = await axios.post("/admin/saves", save);
+      return res.data;
+    },
+    {
+      onSuccess: () => {
+        queryClient.invalidateQueries("saves");
+      },
+    }
+  );
+  return {
+    saveData: mutate,
+  };
+};
