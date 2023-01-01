@@ -1,8 +1,9 @@
 use std::{
     collections::{BTreeMap, VecDeque},
-    fs, io,
-    process::{Command, Output},
+    fs,
+    process::Command,
 };
+use wait_timeout::ChildExt;
 
 use serde::{Deserialize, Serialize};
 
@@ -32,19 +33,48 @@ impl Service {
     pub fn is_valid(&self) -> bool {
         return self.name != "" && self.command != "";
     }
-    pub fn check_with_env(&self, env: &Vec<(String, String)>) -> io::Result<Output> {
+    pub fn check_with_env(&self, env: &Vec<(String, String)>) -> Result<TestOutput, ()> {
         // get PATH from env
         let path = std::env::var("PATH").unwrap_or("/usr/bin:/bin:/usr/sbin:/sbin".to_string());
-        let output = Command::new("sh")
+        let child = Command::new("sh")
             .current_dir("./resources")
             .arg("-c")
             .arg(&self.command)
             .env_clear()
             .env("PATH", path)
             .envs(env.clone())
-            .output();
-        output
+            .spawn();
+        let mut child = match child {
+            Ok(child) => child,
+            Err(_) => return Err(()),
+        };
+        let output = child.wait_timeout(std::time::Duration::from_secs(5));
+        let output = match output {
+            Ok(output) => output,
+            Err(_) => return Err(()),
+        };
+        match output {
+            Some(status) => Ok(TestOutput {
+                up: status.success(),
+                message: "I killed stdout I swear it will be back".to_string(),
+                error: "I killed stderr I swear it will be back".to_string(),
+            }),
+            None => {
+                child.kill().unwrap();
+                Ok(TestOutput {
+                    up: false,
+                    message: "".to_string(),
+                    error: "Timeout".to_string(),
+                })
+            }
+        }
     }
+}
+
+pub struct TestOutput {
+    pub up: bool,
+    pub message: String,
+    pub error: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]

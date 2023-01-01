@@ -2,7 +2,7 @@ mod base;
 mod password;
 mod save;
 pub mod saves {
-    pub use super::save::{get_autosave_names, get_save_names, load_save,SaveError};
+    pub use super::save::{get_autosave_names, get_save_names, load_save, SaveError};
 }
 pub mod passwords {
     pub use super::password::{
@@ -291,7 +291,7 @@ fn score_teams(config: &mut Config) {
                     let Ok(output) = check.check_with_env(&team.env) else {
                         return;
                     };
-                    if output.status.success() {
+                    if output.up {
                         let mut codes = codes.lock().unwrap();
                         let codevec = codes
                             .entry(name.clone())
@@ -322,3 +322,4 @@ fn score_teams(config: &mut Config) {
         });
     }
 }
+

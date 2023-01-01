@@ -7,6 +7,7 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use tracing::trace;
 
 use crate::{
     checker::{passwords, saves, Config, ConfigError, Service, TeamError},
@@ -120,9 +121,9 @@ async fn test_service(
             if let Ok(output) = service.check_with_env(&team.env) {
                 results.push(TestResult {
                     team: name.clone(),
-                    up: output.status.success(),
-                    message: String::from_utf8_lossy(&output.stdout).to_string(),
-                    error: String::from_utf8_lossy(&output.stderr).to_string(),
+                    up: output.up,
+                    message: output.message,
+                    error: output.error,
                 });
             } else {
                 results.push(TestResult {

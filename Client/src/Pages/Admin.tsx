@@ -16,7 +16,6 @@ import {
   useTestService,
 } from "../Hooks/CtrlHooks";
 import { Service } from "../types";
-import { formatDate } from "../util";
 
 interface IServiceProps {
   service: Service;
