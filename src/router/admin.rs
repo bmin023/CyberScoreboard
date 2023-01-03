@@ -7,7 +7,6 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use tracing::trace;
 
 use crate::{
     checker::{passwords, saves, Config, ConfigError, Service, TeamError},
@@ -53,7 +52,7 @@ struct AdminInfo {
 
 /// GET the admin config
 async fn admin_info(State(state): State<ConfigState>) -> Json<AdminInfo> {
-    let config = state.read().unwrap();
+    let config = state.read().await;
     let teams = config.teams.iter().map(|(name, team)| AdminTeam {
         name: name.clone(),
         env: team.env.clone(),
@@ -75,7 +74,7 @@ async fn edit_service(
     if !payload.is_valid() {
         return StatusCode::BAD_REQUEST;
     }
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     if service != payload.name && config.services.iter().any(|s| s.name == payload.name) {
         return StatusCode::CONFLICT;
     }
@@ -92,7 +91,7 @@ async fn delete_service(
     State(state): State<ConfigState>,
     Path(service): Path<String>,
 ) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     match config.remove_service(&service) {
         Ok(_) => StatusCode::OK,
         Err(ConfigError::DoesNotExist) => StatusCode::NOT_FOUND,
@@ -114,11 +113,11 @@ async fn test_service(
     State(state): State<ConfigState>,
     Path(service): Path<String>,
 ) -> Result<Json<Vec<TestResult>>, StatusCode> {
-    let config = state.read().unwrap();
+    let config = state.read().await;
     if let Some(service) = config.services.iter().find(|s| s.name == service) {
         let mut results = Vec::new();
         for (name, team) in config.teams.iter() {
-            if let Ok(output) = service.check_with_env(&team.env) {
+            if let Ok(output) = service.check_with_env(&team.env).await {
                 results.push(TestResult {
                     team: name.clone(),
                     up: output.up,
@@ -146,7 +145,7 @@ async fn add_service(State(state): State<ConfigState>, Json(payload): Json<Servi
     if !payload.is_valid() {
         return StatusCode::BAD_REQUEST;
     }
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     match config.add_service(payload) {
         Ok(_) => StatusCode::OK,
         Err(ConfigError::AlreadyExists) => StatusCode::CONFLICT,
@@ -177,7 +176,7 @@ async fn edit_env(
     if !payload.is_valid() {
         return StatusCode::BAD_REQUEST;
     }
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     if let Some(team) = config.teams.get_mut(&team) {
         if let Some(old_env) = team.env.iter_mut().find(|(name, _)| name == &env) {
             old_env.0 = payload.name;
@@ -196,7 +195,7 @@ async fn delete_env(
     State(state): State<ConfigState>,
     Path((team, env)): Path<(String, String)>,
 ) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     if let Some(team) = config.teams.get_mut(&team) {
         if let Some(index) = team.env.iter().position(|(name, _)| name == &env) {
             team.env.remove(index);
@@ -220,7 +219,7 @@ async fn add_env(
     if !payload.is_valid() {
         return StatusCode::BAD_REQUEST;
     }
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     if let Some(team) = config.teams.get_mut(&team) {
         if team.env.iter().any(|(name, _)| name == &payload.name) {
             StatusCode::CONFLICT
@@ -244,7 +243,7 @@ async fn edit_team(
     Path(team_name): Path<String>,
     Json(payload): Json<TeamPayload>,
 ) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     if config.teams.contains_key(&payload.name) {
         return StatusCode::CONFLICT;
     }
@@ -258,7 +257,7 @@ async fn edit_team(
 
 /// DELETE a team
 async fn delete_team(State(state): State<ConfigState>, Path(team): Path<String>) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     if config.teams.remove(&team).is_some() {
         StatusCode::OK
     } else {
@@ -271,7 +270,7 @@ async fn add_team(
     State(state): State<ConfigState>,
     Json(payload): Json<TeamPayload>,
 ) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     match config.add_team(payload.name) {
         Ok(_) => StatusCode::OK,
         Err(TeamError::AlreadyExists) => StatusCode::CONFLICT,
@@ -280,19 +279,19 @@ async fn add_team(
 }
 
 async fn stop_game(State(state): State<ConfigState>) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     config.stop();
     StatusCode::OK
 }
 
 async fn start_game(State(state): State<ConfigState>) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     config.start();
     StatusCode::OK
 }
 
 async fn reset_scores(State(state): State<ConfigState>) -> StatusCode {
-    let mut config = state.write().unwrap();
+    let mut config = state.write().await;
     config.reset_scores();
     StatusCode::OK
 }
@@ -399,7 +398,7 @@ struct SavePayload {
 }
 
 async fn save(State(state): State<ConfigState>, Json(payload): Json<SavePayload>) -> StatusCode {
-    let config = state.read().unwrap();
+    let config = state.read().await;
     match config.save(payload.name.as_str()) {
         Ok(_) => StatusCode::OK,
         Err(_) => StatusCode::INTERNAL_SERVER_ERROR,
@@ -410,7 +409,7 @@ async fn load_save(
     State(state): State<ConfigState>,
     Json(payload): Json<SavePayload>,
 ) -> StatusCode {
-    let mut old_config = state.write().unwrap();
+    let mut old_config = state.write().await;
     let Ok(config) = Config::from_save(&payload.name) else {
         return StatusCode::INTERNAL_SERVER_ERROR;
     };

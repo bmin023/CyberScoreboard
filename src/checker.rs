@@ -13,11 +13,11 @@ pub mod passwords {
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
+use tokio::task::JoinSet;
 use tracing::{debug, error, info};
 
 use std::fmt::Display;
 use std::fs;
-use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
 use base::*;
@@ -135,8 +135,8 @@ impl Config {
             }
         }
     }
-    pub fn score_tick(&mut self) {
-        score_teams(self);
+    pub async fn score_tick(&mut self) {
+        score_teams(self).await;
     }
     pub fn remove_service(&mut self, name: &str) -> Result<(), ConfigError> {
         if let Some(index) = self.services.iter().position(|s| s.name == name) {
@@ -274,52 +274,40 @@ fn load_services() -> Vec<Service> {
     services
 }
 
-fn score_teams(config: &mut Config) {
+async fn score_teams(config: &mut Config) {
     let services = &config.services;
-    let exit_codes = Arc::new(Mutex::new(BTreeMap::<String, Vec<bool>>::new()));
-    for team in config.teams.keys() {
-        exit_codes
-            .lock()
-            .unwrap()
-            .insert(team.clone(), vec![false; services.len()]);
+    let mut set = JoinSet::new();
+
+    for (name, team) in &config.teams {
+        for check in services.iter().cloned() {
+            let env = team.env.clone();
+            let name = name.clone();
+            set.spawn(async move {
+                let Ok(output) = check.check_with_env(&env).await else {
+                    return None;
+                };
+                Some((name, check.name, output.up))
+            });
+        }
     }
-    std::thread::scope(|s| {
-        for (name, team) in &config.teams {
-            for (i, check) in services.iter().enumerate() {
-                let codes = Arc::clone(&exit_codes);
-                s.spawn(move || {
-                    let Ok(output) = check.check_with_env(&team.env) else {
-                        return;
-                    };
-                    if output.up {
-                        let mut codes = codes.lock().unwrap();
-                        let codevec = codes
-                            .entry(name.clone())
-                            .or_insert(vec![false; services.len()]);
-                        codevec[i] = true;
+
+    while let Some(res) = set.join_next().await {
+        let Ok(res) = res else {
+            continue;
+        };
+        if let Some((team_name, service_name, up)) = res {
+            config.teams.entry(team_name).and_modify(|team| {
+                team.scores.entry(service_name).and_modify(|score| {
+                    score.up = up;
+                    if up {
+                        score.score += 1;
+                    }
+                    score.history.push_front(up);
+                    if score.history.len() > 10 {
+                        score.history.pop_back();
                     }
                 });
-            }
+            });
         }
-    });
-    let codes = exit_codes.lock().unwrap();
-    for (team_name, team_codes) in codes.iter() {
-        config.teams.entry(team_name.to_owned()).and_modify(|team| {
-            for (up, service) in team_codes.iter().zip(services.iter()) {
-                team.scores
-                    .entry(service.name.to_owned())
-                    .and_modify(|score| {
-                        score.up = *up;
-                        if *up {
-                            score.score += service.multiplier as u32;
-                        }
-                        score.history.push_front(*up);
-                        if score.history.len() > 10 {
-                            score.history.pop_back();
-                        }
-                    });
-            }
-        });
     }
 }
-

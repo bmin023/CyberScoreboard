@@ -4,23 +4,19 @@ mod router;
 use axum::Router;
 use axum_extra::routing::SpaRouter;
 use checker::Config;
-use std::{
-    net::SocketAddr,
-    sync::{Arc, RwLock},
-    thread,
-    time::Duration,
-};
-use tokio::time;
+use std::{net::SocketAddr, sync::Arc, time::Duration};
+use tokio::{sync::RwLock, time};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
-use tracing::{error, info, info_span, debug, debug_span};
+use tracing::{debug, error, info, info_span};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 pub type ConfigState = Arc<RwLock<Config>>;
 
 #[tokio::main]
 async fn main() {
-    tracing_subscriber::registry() .with(
+    tracing_subscriber::registry()
+        .with(
             tracing_subscriber::EnvFilter::try_from_env("LOG")
                 .unwrap_or_else(|_| "scoreboard=trace,tower_http=info".into()),
         )
@@ -32,24 +28,34 @@ async fn main() {
     tokio::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(10));
         loop {
-            let another_clone = Arc::clone(&score_state);
             interval.tick().await;
-            thread::spawn(move || {
-                let thread_arc = Arc::clone(&another_clone);
-                let span = debug_span!("Game Loop");
-                let _enter = span.enter();
-                let mut config = { thread_arc.read().unwrap().clone() };
-                debug!("Game Tick: {}", config.run_time().as_secs());
-                {
-                    if config.is_active() {
-                        config.inject_tick();
-                        config.score_tick();
-                        let mut truth = thread_arc.write().unwrap();
-                        truth.inject_tick();         
-                        truth.smart_combine(config);
-                    }
-                };
-            });
+            //            thread::spawn(move || {
+            //                let thread_arc = Arc::clone(&another_clone);
+            //                let span = debug_span!("Game Loop");
+            //                let _enter = span.enter();
+            //                let mut config = { thread_arc.read().unwrap().clone() };
+            //                debug!("Game Tick: {}", config.run_time().as_secs());
+            //                {
+            //                    if config.is_active() {
+            //                        config.inject_tick();
+            //                        config.score_tick();
+            //                        let mut truth = thread_arc.write().unwrap();
+            //                        truth.inject_tick();
+            //                        truth.smart_combine(config);
+            //                    }
+            //                };
+            //            })
+
+            debug!("Game Tick");
+            let mut config = { score_state.read().await.clone() };
+            if config.is_active() {
+                config.inject_tick();
+                config.score_tick().await;
+                let mut truth = score_state.write().await;
+                truth.inject_tick();
+                truth.smart_combine(config);
+            }
+            debug!("Game Tick Complete");
         }
     });
     let save_loop_state = Arc::clone(&state);
@@ -59,7 +65,7 @@ async fn main() {
             interval.tick().await;
             let span = info_span!("Save Loop");
             let _enter = span.enter();
-            let config = save_loop_state.read().unwrap();
+            let config = save_loop_state.read().await;
             info!("Autosaving");
             if let Err(err) = config.autosave() {
                 error!("Failed to autosave: {:?}", err);
