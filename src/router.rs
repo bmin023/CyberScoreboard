@@ -62,16 +62,15 @@ async fn team_scores(
 ) -> Result<Json<TeamScore>, StatusCode> {
     let config = state.read().await;
     if let Some(team) = config.teams.get(&team) {
-        let services = config.services.iter().map(|s| s.name.clone());
-        let scores = team
-            .scores
-            .iter()
-            .filter(|(name, _)| config.services.iter().any(|s| &s.name == *name))
-            .map(|(_, score)| score.clone());
-        Ok(Json(TeamScore {
-            services: services.collect(),
-            scores: scores.collect(),
-        }))
+        let team_scores = config.services.iter().fold(TeamScore {
+            services: Vec::new(),
+            scores: Vec::new(),
+        }, |mut acc, s| {
+            acc.services.push(s.name.clone());
+            acc.scores.push(team.scores.get(&s.name).unwrap_or(&Score::default()).clone());
+            acc
+        });
+        Ok(Json(team_scores))
     } else {
         Err(StatusCode::NOT_FOUND)
     }

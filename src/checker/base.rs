@@ -22,6 +22,7 @@ pub struct Service {
     pub command: String,
     pub multiplier: u8,
 }
+
 impl Service {
     pub fn new(name: String, command: String) -> Self {
         Service {

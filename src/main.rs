@@ -22,30 +22,12 @@ async fn main() {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
-    // console_subscriber::init();
     let state = Arc::new(RwLock::new(Config::new()));
     let score_state = Arc::clone(&state);
     tokio::spawn(async move {
         let mut interval = time::interval(Duration::from_secs(10));
         loop {
             interval.tick().await;
-            //            thread::spawn(move || {
-            //                let thread_arc = Arc::clone(&another_clone);
-            //                let span = debug_span!("Game Loop");
-            //                let _enter = span.enter();
-            //                let mut config = { thread_arc.read().unwrap().clone() };
-            //                debug!("Game Tick: {}", config.run_time().as_secs());
-            //                {
-            //                    if config.is_active() {
-            //                        config.inject_tick();
-            //                        config.score_tick();
-            //                        let mut truth = thread_arc.write().unwrap();
-            //                        truth.inject_tick();
-            //                        truth.smart_combine(config);
-            //                    }
-            //                };
-            //            })
-
             debug!("Game Tick");
             let mut config = { score_state.read().await.clone() };
             if config.is_active() {
