@@ -1,4 +1,5 @@
 mod base;
+mod inject;
 mod password;
 mod save;
 pub mod saves {
@@ -14,16 +15,18 @@ pub mod passwords {
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use tokio::task::JoinSet;
-use tracing::{debug, error, info};
+use tracing::{error, info};
 
 use std::fmt::Display;
 use std::fs;
 use std::time::{Duration, Instant};
 
-use base::*;
 pub use base::{Score, Service, Team, TeamError};
+use inject::{load_injects, Inject};
 use password::{load_password_saves, validate_password_fs};
 use save::{autosave, load_save, save_config, validate_save_fs, SaveError};
+
+use self::inject::ResponseError;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -85,6 +88,7 @@ impl Config {
                     .map(|s| (s.name.to_owned(), Score::default()))
                     .collect(),
                 env: vec![],
+                inject_responses: vec![],
             },
         );
         validate_password_fs(self);
@@ -205,8 +209,21 @@ impl Config {
             if let Some(index) = self.injects.iter().position(|i| i.name == inject.name) {
                 self.injects[index] = inject;
             } else {
-                debug!("Couldn't resolve inject: {}", inject.name);
+                error!("Couldn't resolve inject: {}", inject.name);
             }
+        }
+    }
+    pub fn submit_response(&mut self, team_name: &str, inject: &str, extension: &str, data: &[u8]) -> Result<(),ResponseError> {
+        if let Some(team) = self.teams.get_mut(team_name) {
+            if let Some(inject) = self.injects.iter().find(|i| i.name == inject) {
+                let res = inject.new_response(team_name,extension, data)?;
+                team.inject_responses.push(res);
+                Ok(())
+            } else {
+                Err(ResponseError::InjectNotFound)
+            }
+        } else {
+            Err(ResponseError::TeamNotFound)
         }
     }
 }
@@ -255,6 +272,7 @@ fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
                         .map(|s| (s.name.to_owned(), Score::default()))
                         .collect(),
                     env,
+                    inject_responses: vec![],
                 },
             )
         })
