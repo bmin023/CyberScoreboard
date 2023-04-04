@@ -320,7 +320,7 @@ const AdminPage = () => {
         <div className="py-1 bg-slate-100 h-screen dark:bg-zinc-900 dark:text-zinc-100">
             <h1 className="text-4xl text-center font-bold">Admin Page</h1>
             <Controls active={info.active} />
-            <form method="post" encType="multipart/form-data" onSubmit={e => {
+            { /* For Later: <form method="post" encType="multipart/form-data" onSubmit={e => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 uploadFile(formData);
@@ -333,7 +333,7 @@ const AdminPage = () => {
                 <div>
                     <button>Submit</button>
                 </div>
-            </form>
+            </form> */}
 
             <Services />
             <Teams />

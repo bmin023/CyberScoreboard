@@ -88,7 +88,7 @@ async fn team_scores(
 }
 
 async fn upload(mut multipart: Multipart) {
-    while let Some(mut field) = multipart.next_field().await.unwrap() {
+    while let Some(field) = multipart.next_field().await.unwrap() {
         let name = field.file_name().unwrap().to_string();
         let data = field.bytes().await.unwrap();
 

@@ -1,4 +1,4 @@
-use std::{fs, collections::BTreeMap, io::Write, error::Error};
+use std::{fs, collections::BTreeMap, io::Write};
 
 use serde::{Serialize, Deserialize};
 

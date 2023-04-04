@@ -1,0 +1,17 @@
+Port Scan: ./port.sh google.com 80
+Good Service: "true"
+Bad Service: "false"
+Random Service: ./rand.py 4
+SSH No Login: SSH/nologin.sh wind.ecs.baylor.edu
+#I Don't feel like actually writing credentials here
+SSH Login: SSH/login.sh host.com user:password
+SSH Login From File: SSH/login.sh host.com $(shuf -n 1 PW/sshpassfile.pw) 
+#will match substring so you don't have to write the whole description
+Minceraft: MC/matchdesc.py mc.hypixel.net Hypixel Network 
+Website: WEB/curlfind.sh https://www.nytimes.com/games/wordle/index.html "Guess the hidden word in 6 tries."
+Pulling From Env Variable: WEB/curlfind.sh $WEBSITE_URL "Yahoo | Mail, Weather, Search"
+#Not the perfect solution, but it's quick and dirty
+NSLookup: nslookup yahoo.com
+FTP No Login: FTP/nologin.sh ftp.myserver.net
+Query AD: AD/nologin.sh baylor.edu
+Login AD: AD/login baylor.edu baylor.edu user:password Bears

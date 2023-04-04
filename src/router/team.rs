@@ -7,7 +7,7 @@ use axum::{
 use serde::Deserialize;
 
 use crate::{
-    checker::{passwords::{get_password_groups, overwrite_passwords}, self}, ConfigState,
+    checker::passwords::{get_password_groups, overwrite_passwords}, ConfigState,
 };
 
 pub fn team_router() -> Router<ConfigState> {
