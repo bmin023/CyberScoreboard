@@ -1,5 +1,9 @@
 /target
-/resources
 /Client/node_modules
 /Client/dist
 /Client/*.lock
+/resources/services.yaml
+/resources/teams.yaml
+/resources/injects.yaml
+/resources/PW
+/resources/save
