@@ -246,7 +246,7 @@ impl Config {
                     .iter()
                     .find(|res| res.name == i.name)
                     .is_some()
-                    && self.game_time >= i.start
+                    && time >= i.start
             })
             .cloned()
             .collect())

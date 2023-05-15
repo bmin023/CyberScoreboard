@@ -9,7 +9,11 @@ import TeamScore from "./Pages/TeamScore";
 import AdminPage from "./Pages/Admin";
 import TeamPasswords from "./Pages/TeamPasswords";
 
-axios.defaults.baseURL = `http://${window.location.hostname}:${window.location.port}/api`;
+if(import.meta.env.PROD) {
+    axios.defaults.baseURL = `http://${window.location.hostname}:${window.location.port}/api`;
+} else {
+    axios.defaults.baseURL = `http://${window.location.hostname}:8000/api`;
+}
 axios.defaults.headers.post["Content-Type"] = "application/json";
 
 const queryClient = new QueryClient();

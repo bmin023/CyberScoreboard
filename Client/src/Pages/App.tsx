@@ -77,7 +77,7 @@ function App() {
       <div className="w-screen flex justify-center content-center">
         <div className="h-full">
           <h1 className="text-6xl font-extrabold my-3 text-center">
-            Cyber Scoreboard
+            Cyber Scoreboard {import.meta.env.DEV ? "(DEV)" : ""}
           </h1>
           <div className="px-10">
             <Scoreboard />
