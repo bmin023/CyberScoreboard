@@ -11,6 +11,9 @@ pub mod passwords {
         write_passwords, PasswordSave,
     };
 }
+pub mod injects {
+    pub use super::inject::{Inject, InjectResponse};
+}
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
@@ -213,10 +216,16 @@ impl Config {
             }
         }
     }
-    pub fn submit_response(&mut self, team_name: &str, inject: &str, extension: &str, data: &[u8]) -> Result<(),ResponseError> {
+    pub fn submit_response(
+        &mut self,
+        team_name: &str,
+        inject: &str,
+        extension: &str,
+        data: &[u8],
+    ) -> Result<(), ResponseError> {
         if let Some(team) = self.teams.get_mut(team_name) {
             if let Some(inject) = self.injects.iter().find(|i| i.name == inject) {
-                let res = inject.new_response(team_name,extension, data)?;
+                let res = inject.new_response(team_name, extension, data)?;
                 team.inject_responses.push(res);
                 Ok(())
             } else {
@@ -225,6 +234,22 @@ impl Config {
         } else {
             Err(ResponseError::TeamNotFound)
         }
+    }
+    pub fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError> {
+        let team = self.teams.get(team).ok_or(ConfigError::DoesNotExist)?;
+        let time = (self.run_time().as_secs() / 60) as u32;
+        Ok(self
+            .injects
+            .iter()
+            .filter(|i| {
+                team.inject_responses
+                    .iter()
+                    .find(|res| res.name == i.name)
+                    .is_some()
+                    && self.game_time >= i.start
+            })
+            .cloned()
+            .collect())
     }
 }
 

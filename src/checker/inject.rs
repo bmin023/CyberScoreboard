@@ -1,8 +1,8 @@
-use std::{fs, collections::BTreeMap, io::Write};
+use std::{collections::BTreeMap, fs, io::Write, time::SystemTime};
 
-use serde::{Serialize, Deserialize};
+use serde::{Deserialize, Serialize};
 
-use super::{Service, Config, ConfigError};
+use super::{Config, ConfigError, Service};
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Inject {
@@ -14,6 +14,7 @@ pub struct Inject {
     pub duration: u32,
     pub side_effects: Option<Vec<SideEffect>>,
     pub completed: bool,
+    pub file_type: Option<Vec<String>>,
 }
 
 impl Inject {
@@ -25,6 +26,7 @@ impl Inject {
             duration: yaml.duration,
             side_effects: yaml.side_effects,
             completed: false,
+            file_type: yaml.file_type,
         }
     }
     fn format_name(&self) -> String {
@@ -32,18 +34,32 @@ impl Inject {
     }
     /// Creates a new file in at resources/injects/<team_name>/filename
     /// Then sends back an artifact that the team did in fact submit.
-    pub fn new_response(&self, team_name: &str, extension: &str, data: &[u8]) -> Result<InjectResponse,ResponseError> {
+    pub fn new_response(
+        &self,
+        team_name: &str,
+        extension: &str,
+        data: &[u8],
+    ) -> Result<InjectResponse, ResponseError> {
         // check if folder exists
         let path = format!("resources/injects/{}", team_name);
         fs::create_dir_all(path).map_err(|_| ResponseError::FileError)?;
-        let filename = format!("{}_response.{}", self.format_name(), extension);
+        let filename = if self.completed {
+            format!("{}_late_response.{}", self.format_name(), extension)
+        } else {
+            format!("{}_response.{}", self.format_name(), extension)
+        };
         let path = format!("resources/injects/{}/{}", team_name, filename);
         let mut file = fs::File::create(path).map_err(|_| ResponseError::FileError)?;
         file.write_all(data).map_err(|_| ResponseError::FileError)?;
+        let time = SystemTime::now()
+            .duration_since(SystemTime::UNIX_EPOCH)
+            .unwrap()
+            .as_secs();
         Ok(InjectResponse {
             name: self.name.clone(),
             late: !self.completed,
             filename: filename.to_string(),
+            upload_time: time,
         })
     }
 }
@@ -88,6 +104,7 @@ impl SideEffect {
 #[derive(Deserialize)]
 struct YAMLInject {
     file: String,
+    file_type: Option<Vec<String>>,
     start: u32,
     duration: u32,
     side_effects: Option<Vec<SideEffect>>,
@@ -98,4 +115,5 @@ pub struct InjectResponse {
     pub name: String,
     pub late: bool,
     pub filename: String,
+    pub upload_time: u64,
 }
