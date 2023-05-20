@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "react-query";
 import {
     AdminInfo,
     EnvPayload,
+    InjectRequest,
     PasswordBody,
     PasswordPayload,
     SavePayload,
@@ -509,4 +510,26 @@ export const useUploadFile = () => {
     return {
         uploadFile: mutate,
     }
+}
+
+export const useTeamInjects = (team: string | undefined) => {
+    if (team === undefined)
+        return {
+            injects: {
+                active_injects: [],
+                completed_injects: []
+            } as InjectRequest, injectsLoading: false, injectsError: true
+        };
+    const { data, isLoading, error } = useQuery(
+        ["injects", team],
+        async () => {
+            const res = await axios.get(`/team/${team}/injects`);
+            return res.data;
+        }
+    );
+    return {
+        injects: data as InjectRequest,
+        injectsLoading: isLoading,
+        injectsError: error,
+    };
 }

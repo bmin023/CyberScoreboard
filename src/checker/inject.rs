@@ -1,6 +1,7 @@
 use std::{collections::BTreeMap, fs, io::Write, time::SystemTime};
 
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
 use super::{Config, ConfigError, Service};
 
@@ -8,9 +9,9 @@ use super::{Config, ConfigError, Service};
 pub struct Inject {
     pub name: String,
     pub file: String,
-    /// Time when the inject happens in seconds
+    /// Time when the inject happens in minutes
     pub start: u32,
-    /// Duration of inject in seconds
+    /// Duration of inject in minutes
     pub duration: u32,
     pub side_effects: Option<Vec<SideEffect>>,
     pub completed: bool,
@@ -18,6 +19,9 @@ pub struct Inject {
 }
 
 impl Inject {
+    pub fn is_active(&self, minutes_since_start: u32) -> bool {
+        minutes_since_start >= self.start && minutes_since_start < self.start + self.duration
+    }
     fn from_yaml(name: String, yaml: YAMLInject) -> Self {
         Self {
             name,
@@ -77,10 +81,11 @@ pub fn load_injects() -> Vec<Inject> {
     };
     let yaml_tree: BTreeMap<String, YAMLInject> =
         serde_yaml::from_str(&file).expect("injects.yaml is not valid");
-    let injects = yaml_tree
+    let injects : Vec<Inject> = yaml_tree
         .into_iter()
         .map(|(name, inject)| Inject::from_yaml(name, inject))
         .collect();
+    info!("Loaded {} injects", injects.len());
     injects
 }
 

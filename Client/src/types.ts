@@ -71,3 +71,22 @@ export interface SaveWrapper {
 export interface SavePayload {
     name: string,
 }
+
+export interface Inject {
+    name: string,
+    file: string,
+    start: number,
+    duration: number,
+    completed: boolean,
+    file_type: string[] | null,
+}
+export interface InjectResponse {
+    name: string,
+    late: boolean,
+    filename: string,
+    upload_time: number,
+}
+export interface InjectRequest {
+    active_injects: Inject[],
+    completed_injects: InjectResponse[]
+}

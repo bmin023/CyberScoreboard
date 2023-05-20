@@ -130,7 +130,7 @@ impl Config {
         let mut side_effects = Vec::new();
         let time = (self.run_time().as_secs() / 60) as u32;
         for inject in self.injects.iter_mut().filter(|i| !i.completed) {
-            if time >= inject.start + inject.duration {
+            if !inject.is_active(time) {
                 inject.completed = true;
                 side_effects.extend(inject.side_effects.clone().unwrap_or_default());
             }
@@ -242,7 +242,7 @@ impl Config {
             .injects
             .iter()
             .filter(|i| {
-                team.inject_responses
+                !team.inject_responses
                     .iter()
                     .find(|res| res.name == i.name)
                     .is_some()
