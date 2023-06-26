@@ -7,6 +7,7 @@ import axios from "axios";
 import { QueryClient, QueryClientProvider } from "react-query";
 import TeamScore from "./Pages/TeamScore";
 import AdminPage from "./Pages/Admin";
+import TeamInject from "./Pages/TeamInject";
 import TeamPasswords from "./Pages/TeamPasswords";
 
 if(import.meta.env.PROD) {
@@ -23,6 +24,7 @@ const LoginRouter = () => (
     <Route path="/" element={<App />} />
     <Route path="/team/:teamName" element={<TeamScore />} />
     <Route path="/team/:teamName/passwords" element={<TeamPasswords />} />
+    <Route path="/team/:teamName/inject/:injectId" element={<TeamInject />} />
     <Route path="/admin" element={<AdminPage />} />
   </Routes>
 );

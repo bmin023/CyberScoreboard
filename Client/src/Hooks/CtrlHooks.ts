@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "react-query";
 import {
     AdminInfo,
     EnvPayload,
+    InjectData,
     InjectRequest,
     PasswordBody,
     PasswordPayload,
@@ -512,6 +513,19 @@ export const useUploadFile = () => {
     }
 }
 
+export const useUploadInject = (team: string | undefined, inject: string | undefined) => {
+    const { mutate } = useMutation(async (formData: FormData) => {
+        axios.post(`/team/${team}/injects/${inject}/upload`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        })
+    });
+    return {
+        uploadInject: mutate,
+    }
+}
+
 export const useTeamInjects = (team: string | undefined) => {
     if (team === undefined)
         return {
@@ -532,4 +546,32 @@ export const useTeamInjects = (team: string | undefined) => {
         injectsLoading: isLoading,
         injectsError: error,
     };
+}
+
+export const useTeamInject = (team: string | undefined, uuid: string | undefined) => {
+    if (team === undefined || uuid === undefined)
+        return {
+            inject: {
+                desc: {
+                    uuid: "",
+                    name: "",
+                    start: 0,
+                    duration: 0,
+                    completed: false,
+                },
+                html: "",
+            } as InjectData, injectLoading: true, injectError: true
+        }
+    const { data, isLoading, error } = useQuery(
+        ["inject", team, uuid],
+        async () => {
+            const res = await axios.get(`/team/${team}/injects/${uuid}`);
+            return res.data;
+        }
+    );
+    return {
+        inject: data as InjectData,
+        injectLoading: isLoading,
+        injectError: error,
+    }
 }

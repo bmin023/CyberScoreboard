@@ -6,7 +6,7 @@ const Scoreboard = () => {
     const { teamName } = useParams();
     const { data, scoreLoading, scoreError, scoreUpdatedAt } =
         useTeamScore(teamName);
-    if (scoreLoading) return <div>Loading...</div>;
+    if (scoreLoading || !teamName) return <div>Loading...</div>;
     if (scoreError) return <div>Error!</div>;
     return (
         <div className="w-10/12 m-auto my-4">
@@ -63,7 +63,9 @@ const Injects = () => {
                             {injects.active_injects.map((inject) => (
                                 <tr key={inject.name}>
                                     <td className="p-2 w-0 border-b font-medium text-xl bg-green-500">
-                                        {inject.name}
+                                        <Link to={`/team/${teamName}/inject/${inject.uuid}`}>
+                                            {inject.name}
+                                        </Link>
                                     </td>
                                 </tr>
                             ))}

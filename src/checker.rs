@@ -19,6 +19,7 @@ use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use tokio::task::JoinSet;
 use tracing::{error, info};
+use uuid::Uuid;
 
 use std::fmt::Display;
 use std::fs;
@@ -219,13 +220,13 @@ impl Config {
     pub fn submit_response(
         &mut self,
         team_name: &str,
-        inject: &str,
-        extension: &str,
+        inject_uuid: Uuid,
+        filename: &str,
         data: &[u8],
     ) -> Result<(), ResponseError> {
         if let Some(team) = self.teams.get_mut(team_name) {
-            if let Some(inject) = self.injects.iter().find(|i| i.name == inject) {
-                let res = inject.new_response(team_name, extension, data)?;
+            if let Some(inject) = self.injects.iter_mut().find(|i| i.uuid == inject_uuid) {
+                let res = inject.new_response(team_name, filename, data)?;
                 team.inject_responses.push(res);
                 Ok(())
             } else {
@@ -234,6 +235,9 @@ impl Config {
         } else {
             Err(ResponseError::TeamNotFound)
         }
+    }
+    pub fn get_inject(&self, inject_uuid: Uuid) -> Option<Inject> {
+        self.injects.iter().find(|i| i.uuid == inject_uuid).cloned()
     }
     pub fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError> {
         let team = self.teams.get(team).ok_or(ConfigError::DoesNotExist)?;
@@ -244,7 +248,7 @@ impl Config {
             .filter(|i| {
                 !team.inject_responses
                     .iter()
-                    .find(|res| res.name == i.name)
+                    .find(|res| res.inject_uuid == i.uuid)
                     .is_some()
                     && time >= i.start
             })

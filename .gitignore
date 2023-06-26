@@ -5,5 +5,7 @@
 /resources/services.yaml
 /resources/teams.yaml
 /resources/injects.yaml
+/resources/injects
 /resources/PW
 /resources/save
+/public/downloads

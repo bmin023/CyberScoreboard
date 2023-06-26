@@ -72,21 +72,28 @@ export interface SavePayload {
     name: string,
 }
 
-export interface Inject {
+export interface InjectDesc {
+    uuid: string,
     name: string,
-    file: string,
     start: number,
     duration: number,
     completed: boolean,
-    file_type: string[] | null,
+    file_type?: string[],
 }
 export interface InjectResponse {
-    name: string,
+    uuid: string,
+    inject_uuid: string,
     late: boolean,
     filename: string,
     upload_time: number,
 }
 export interface InjectRequest {
-    active_injects: Inject[],
+    active_injects: InjectDesc[],
     completed_injects: InjectResponse[]
+}
+
+export interface InjectData {
+    desc: InjectDesc,
+    html: string,
+    history: InjectResponse[]
 }

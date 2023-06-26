@@ -1,14 +1,19 @@
 use std::{collections::BTreeMap, fs, io::Write, time::SystemTime};
+use uuid::Uuid;
+
+use handlebars::Handlebars;
+use markdown::to_html;
 
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{info, debug};
 
 use super::{Config, ConfigError, Service};
 
-#[derive(Clone, Serialize, Deserialize)]
+#[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Inject {
+    pub uuid: Uuid,
     pub name: String,
-    pub file: String,
+    pub markdown: String,
     /// Time when the inject happens in minutes
     pub start: u32,
     /// Duration of inject in minutes
@@ -24,8 +29,9 @@ impl Inject {
     }
     fn from_yaml(name: String, yaml: YAMLInject) -> Self {
         Self {
+            uuid: Uuid::new_v4(),
             name,
-            file: yaml.file,
+            markdown: yaml.markdown,
             start: yaml.start,
             duration: yaml.duration,
             side_effects: yaml.side_effects,
@@ -41,30 +47,43 @@ impl Inject {
     pub fn new_response(
         &self,
         team_name: &str,
-        extension: &str,
+        filename: &str,
         data: &[u8],
     ) -> Result<InjectResponse, ResponseError> {
         // check if folder exists
         let path = format!("resources/injects/{}", team_name);
         fs::create_dir_all(path).map_err(|_| ResponseError::FileError)?;
-        let filename = if self.completed {
-            format!("{}_late_response.{}", self.format_name(), extension)
-        } else {
-            format!("{}_response.{}", self.format_name(), extension)
+        let extension = match filename.split(".").last() {
+            Some(ext) => format!(".{}", ext),
+            None => "".to_string(),
         };
-        let path = format!("resources/injects/{}/{}", team_name, filename);
+        let new_filename = if self.completed {
+            format!("{}_late_response{}", self.format_name(), extension)
+        } else {
+            format!("{}_response{}", self.format_name(), extension)
+        };
+        let path = format!("resources/injects/{}/{}", team_name, new_filename);
         let mut file = fs::File::create(path).map_err(|_| ResponseError::FileError)?;
         file.write_all(data).map_err(|_| ResponseError::FileError)?;
         let time = SystemTime::now()
             .duration_since(SystemTime::UNIX_EPOCH)
             .unwrap()
-            .as_secs();
+            .as_millis();
         Ok(InjectResponse {
-            name: self.name.clone(),
-            late: !self.completed,
+            uuid: Uuid::new_v4(),
+            inject_uuid: self.uuid.clone(),
+            late: self.completed,
             filename: filename.to_string(),
             upload_time: time,
         })
+    }
+    pub fn get_html(&self, env: &Vec<(String, String)>) -> String {
+        let map: BTreeMap<String, String> = env.iter().cloned().collect();
+        let reg = Handlebars::new();
+        let filled_md = reg
+            .render_template(&self.markdown, &map)
+            .unwrap_or(self.markdown.clone());
+        to_html(&filled_md)
     }
 }
 
@@ -81,11 +100,12 @@ pub fn load_injects() -> Vec<Inject> {
     };
     let yaml_tree: BTreeMap<String, YAMLInject> =
         serde_yaml::from_str(&file).expect("injects.yaml is not valid");
-    let injects : Vec<Inject> = yaml_tree
+    let injects: Vec<Inject> = yaml_tree
         .into_iter()
         .map(|(name, inject)| Inject::from_yaml(name, inject))
         .collect();
     info!("Loaded {} injects", injects.len());
+    debug!("Injects: {:?}", injects);
     injects
 }
 
@@ -108,17 +128,41 @@ impl SideEffect {
 
 #[derive(Deserialize)]
 struct YAMLInject {
-    file: String,
+    markdown: String,
     file_type: Option<Vec<String>>,
     start: u32,
     duration: u32,
     side_effects: Option<Vec<SideEffect>>,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InjectResponse {
-    pub name: String,
+    pub inject_uuid: Uuid,
+    pub uuid: Uuid,
     pub late: bool,
     pub filename: String,
-    pub upload_time: u64,
+    pub upload_time: u128,
 }
+
+// tests for html
+#[cfg(test)]
+mod tests {
+    use super::*;
+    #[test]
+    fn test_html() {
+        let inject = Inject {
+            uuid: Uuid::new_v4(),
+            name: "Test Inject".to_string(),
+            markdown: "This is a test inject {{VARIABLE}}".to_string(),
+            start: 0,
+            duration: 0,
+            side_effects: None,
+            completed: false,
+            file_type: None,
+        };
+        let vec = &vec![("VARIABLE".to_string(), "test".to_string())];
+        let html = inject.get_html(vec);
+        assert_eq!(html, "<p>This is a test inject test</p>\n");
+    }
+}
+

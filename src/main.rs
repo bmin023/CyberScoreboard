@@ -17,7 +17,7 @@ pub type ConfigState = Arc<RwLock<Config>>;
 async fn main() {
     tracing_subscriber::registry()
         .with(
-            tracing_subscriber::EnvFilter::try_from_env("SCORE_LOG")
+            tracing_subscriber::EnvFilter::try_from_env("LOG_LEVEL")
                 .unwrap_or_else(|_| "scoreboard=info,tower_http=info".into()),
         )
         .with(tracing_subscriber::fmt::layer())
@@ -61,7 +61,7 @@ async fn main() {
         .allow_headers(Any);
     let app = Router::new()
         .nest("/api", router::main_router())
-        .merge(SpaRouter::new("/assets", "public/assets").index_file("../index.html"))
+        .merge(SpaRouter::new("/", "public").index_file("../index.html"))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
