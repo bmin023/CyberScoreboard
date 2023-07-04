@@ -97,6 +97,7 @@ struct InjectDesc {
     duration: u32,
     completed: bool,
     file_type: Option<Vec<String>>,
+    sticky: bool,
 }
 
 impl InjectDesc {
@@ -108,6 +109,7 @@ impl InjectDesc {
             duration: inject.duration,
             completed: inject.completed,
             file_type: inject.file_type,
+            sticky: inject.sticky,
         }
     }
 }

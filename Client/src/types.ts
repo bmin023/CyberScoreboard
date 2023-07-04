@@ -81,6 +81,7 @@ export interface Inject {
     completed: boolean,
     side_effects: SideEffect[],
     file_type: string[] | null,
+    sticky: boolean,
 }
 
 export interface SideEffect {
@@ -93,6 +94,7 @@ export interface InjectDesc {
     duration: number,
     completed: boolean,
     file_type: string[] | null,
+    sticky: boolean,
 }
 export interface InjectResponse {
     uuid: string,
@@ -118,4 +120,5 @@ export interface InjectData {
 export interface TimeData {
     minutes: number,
     seconds: number,
+    active: boolean,
 }

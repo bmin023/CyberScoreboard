@@ -78,38 +78,39 @@ const Injects = () => {
         <div className="w-10/12 m-auto my-4">
             {injects.active_injects.length > 0 &&
                 <InjectHolder title="Active Injects">
-                        <ul>
-                            {injects.active_injects.map((inject) => (
-                                <li key={inject.uuid}>
-                                    <Link className="flex text-lg font-semibold hover:underline underline-offset-2 px-5" to={`/team/${teamName}/inject/${inject.uuid}`}>
-                                        <p className="flex-grow">
-                                            {inject.name}
+                    <ul>
+                        {injects.active_injects.map((inject) => (
+                            <li key={inject.uuid}>
+                                <Link className="flex text-lg font-semibold hover:underline underline-offset-2 px-5" to={`/team/${teamName}/inject/${inject.uuid}`}>
+                                    <p className="flex-grow">
+                                        {inject.name}
+                                        {!inject.sticky &&
                                             <span className="ml-1 text-sm font-light">
-                                                Due {timeRemaining(inject)}
-                                            </span>
+                                                {inject.file_type && inject.file_type.length > 0 ? "Due" : "Ending"} {timeRemaining(inject)}
+                                            </span>}
+                                    </p>
+                                    {injects.completed_injects.find((response) => response.inject_uuid === inject.uuid) &&
+                                        <p className="text-right text-sm font-mono py-1">
+                                            Submitted
                                         </p>
-                                        {injects.completed_injects.find((response) => response.inject_uuid === inject.uuid) &&
-                                            <p className="text-right text-sm font-mono py-1">
-                                                Submitted
-                                            </p>
-                                        }
-                                    </Link>
-                                </li>
-                            ))}
-                        </ul>
+                                    }
+                                </Link>
+                            </li>
+                        ))}
+                    </ul>
                 </InjectHolder>
             }
             {injects.completed_injects.length > 0 &&
                 <InjectHolder title="Submission History">
-                        <ul>
-                            {injects.completed_injects.sort((a, b) => (b.upload_time - a.upload_time)).map((response) => (
-                                <li className="underline-offset-2 px-5" key={response.uuid}>
-                                        <p>
-                                            Submitted {response.filename} to <Link to={`/team/${teamName}/inject/${response.inject_uuid}`} className="font-semibold underline">{response.name}</Link> at {formatDate(new Date(response.upload_time))} <span className="text-red-500">{response.late ? "(Late)" : ""}</span>
-                                        </p>
-                                </li>
-                            ))}
-                        </ul>
+                    <ul>
+                        {injects.completed_injects.sort((a, b) => (b.upload_time - a.upload_time)).map((response) => (
+                            <li className="underline-offset-2 px-5" key={response.uuid}>
+                                <p>
+                                    Submitted {response.filename} to <Link to={`/team/${teamName}/inject/${response.inject_uuid}`} className="font-semibold underline">{response.name}</Link> at {formatDate(new Date(response.upload_time))} <span className="text-red-500">{response.late ? "(Late)" : ""}</span>
+                                </p>
+                            </li>
+                        ))}
+                    </ul>
                 </InjectHolder>
             }
         </div>

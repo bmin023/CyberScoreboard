@@ -68,7 +68,7 @@ async fn main() {
         .with_state(state);
     let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
 
-    info!("Listening on {}", addr);
+    info!("Listening on http://{}", addr);
     axum::Server::bind(&addr)
         .serve(app.into_make_service())
         .await

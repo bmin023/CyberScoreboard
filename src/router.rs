@@ -40,6 +40,7 @@ struct ScoreBody {
 struct TimeBody {
     minutes: u64,
     seconds: u64,
+    active: bool,
 }
 
 async fn time(State(state): State<ConfigState>) -> Json<TimeBody> {
@@ -48,6 +49,7 @@ async fn time(State(state): State<ConfigState>) -> Json<TimeBody> {
     Json(TimeBody {
         minutes: runtime.as_secs() / 60,
         seconds: runtime.as_secs() % 60,
+        active: config.is_active(),
     })
 }
 

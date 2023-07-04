@@ -12,7 +12,7 @@ pub mod passwords {
     };
 }
 pub mod injects {
-    pub use super::inject::{Inject, InjectResponse, InjectUser, CreateInject};
+    pub use super::inject::{CreateInject, Inject, InjectResponse, InjectUser};
 }
 
 use serde::{Deserialize, Serialize};
@@ -190,9 +190,16 @@ impl Config {
         // update injects
         for inject in other.injects {
             if let Some(index) = self.injects.iter().position(|i| i.uuid == inject.uuid) {
-                self.injects[index] = inject;
+                if (inject.completed && !self.injects[index].completed)
+                    && self.injects[index].is_ended((self.run_time().as_secs() / 60) as u32)
+                {
+                    self.injects[index].completed = true;
+                }
             } else {
-                error!("Couldn't resolve inject: {}", inject.name);
+                error!(
+                    "Couldn't resolve inject: {}. It was probably removed during a score tick.",
+                    inject.name
+                );
             }
         }
     }

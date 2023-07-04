@@ -1,20 +1,43 @@
-import { useEffect, useRef } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTeamInject, useTime, useUploadInject } from "../Hooks/CtrlHooks";
 import { formatDate } from "../util";
 
 const TeamInject = () => {
     const { teamName, injectId } = useParams();
-    const { time } = useTime(5000);
+    const { time } = useTime(15000);
     const ref = useRef<HTMLDivElement>(null);
     const { inject, injectError, injectLoading } = useTeamInject(teamName, injectId);
+    const [secondsSince, setSeconds] = useState(0);
+
+    useEffect(() => {
+        setSeconds(0);
+    }, [time]);
+
+    useEffect(() => {
+        console.log(time);
+        const interval = setInterval(() => {
+            if (time.active) {
+                setSeconds(secondsSince + 1);
+            }
+        }, 1000, 1000);
+        return () => clearInterval(interval);
+    }, [secondsSince, time.active]);
+
+
     const getTimeRemaining = () => {
-        if (!inject) return 0;
+        const high = time
         const endTime = inject.desc.start + inject.desc.duration;
-        const minutes = endTime - time.minutes;
-        const seconds = 60 - time.seconds;
-        if (minutes <= 0) return "Done";
-        return `Due in ${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+        let minutes = endTime - high.minutes - 1;
+        let seconds = 60 - (high.seconds + secondsSince);
+        if ( seconds < 0 ) {
+            seconds = 60 + seconds;
+            minutes -= 1;
+        }
+        const hours = Math.floor(minutes / 60);
+        minutes = minutes % 60;
+        if (minutes < 0) return "Done";
+        return `Due in ${hours > 0 ? `${hours}:`:''}${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
     };
     useEffect(() => {
         if (inject && ref.current) {
@@ -43,8 +66,10 @@ const TeamInject = () => {
             <h1 className="text-5xl text-center font-extrabold">
                 {inject.desc.name}
             </h1>
-            <p className="text-center text-xl font-mono">Start: {inject.desc.start} min, Duration: {inject.desc.duration} min</p>
-            <p className="text-center text-xl font-mono">{getTimeRemaining()}</p>
+            <p className="text-center text-xl font-mono">Start: {inject.desc.start} min{!inject.desc.sticky && `, Duration: ${inject.desc.duration} min`}</p>
+            {!inject.desc.sticky &&
+                <p className="text-center text-xl font-mono">{getTimeRemaining()}</p>
+            }
             <div className="prose mx-5 mt-2 md:mx-auto prose-slate dark:prose-invert" ref={ref} />
             <UploadPane />
             <InjectHistory />
@@ -63,6 +88,7 @@ const UploadPane = () => {
         if (submitButton.current)
             submitButton.current.disabled = !hasFile();
     }, [submitButton]);
+    if (inject && inject.desc.file_type && inject.desc.file_type.length === 0) return <></>;
     return (
         <section className="p-5">
             <h2 className="text-3xl text-center font-extrabold m-2">
@@ -92,7 +118,7 @@ const UploadPane = () => {
                 </div>
                 <div className="flex justify-center">
                     <em className="mx-auto">File Type: {inject.desc.file_type ?
-                        inject.desc.file_type.join(",")
+                        inject.desc.file_type.join(", ")
                         : "Any"}</em>
                 </div>
                 <div className="flex justify-center mt-2">

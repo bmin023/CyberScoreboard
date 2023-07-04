@@ -590,15 +590,12 @@ export const useTime = (refresh = 60000) => {
         const res = await axios.get("/time");
         return res.data;
     }, {
+        refetchInterval: refresh,
         placeholderData: {
             minutes: 0,
             seconds: 0,
-        },
-        initialData: {
-            minutes: 0,
-            seconds: 0,
-        },
-        refetchInterval: refresh,
+            active: true,
+        } as TimeData
     });
     return {
         time: data as TimeData,
@@ -642,7 +639,7 @@ export const useAdminEditInject = () => {
     const queryClient = useQueryClient();
     const { mutate } = useMutation(
         async (inject: Inject) => {
-            const res = await axios.put(`/admin/injects/${inject.uuid}`, inject);
+            const res = await axios.post(`/admin/injects/${inject.uuid}`, inject);
             return res.data;
         },
         {

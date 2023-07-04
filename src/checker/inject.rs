@@ -21,6 +21,7 @@ pub struct Inject {
     pub side_effects: Vec<SideEffect>,
     pub completed: bool,
     pub file_type: Option<Vec<String>>,
+    pub sticky: bool,
 }
 
 impl Inject {
@@ -34,10 +35,14 @@ impl Inject {
             side_effects: inject.side_effects,
             completed: false,
             file_type: inject.file_type,
+            sticky: inject.sticky,
         }
     }
     pub fn is_active(&self, minutes_since_start: u32) -> bool {
         minutes_since_start >= self.start && minutes_since_start < self.start + self.duration
+    }
+    pub fn is_ended(&self, minutes_since_start: u32) -> bool {
+        minutes_since_start >= self.start + self.duration
     }
     fn from_yaml(name: String, yaml: YAMLInject) -> Self {
         Self {
@@ -45,10 +50,15 @@ impl Inject {
             name,
             markdown: yaml.markdown,
             start: yaml.start,
-            duration: yaml.duration,
+            duration: yaml.duration.unwrap_or(1),
             side_effects: yaml.side_effects.unwrap_or(vec![]),
             completed: false,
-            file_type: yaml.file_type,
+            file_type: if yaml.no_submit {
+                Some(vec![])
+            } else {
+                yaml.file_types
+            },
+            sticky: yaml.duration.is_none(),
         }
     }
     fn format_name(&self) -> String {
@@ -142,10 +152,12 @@ impl SideEffect {
 #[derive(Deserialize)]
 struct YAMLInject {
     markdown: String,
-    file_type: Option<Vec<String>>,
+    file_types: Option<Vec<String>>,
     start: u32,
-    duration: u32,
+    duration: Option<u32>,
     side_effects: Option<Vec<SideEffect>>,
+    #[serde(default)]
+    no_submit: bool,
 }
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
@@ -166,6 +178,8 @@ pub struct CreateInject {
     pub duration: u32,
     pub side_effects: Vec<SideEffect>,
     pub file_type: Option<Vec<String>>,
+    #[serde(default)]
+    pub sticky: bool,
 }
 
 pub trait InjectUser {
@@ -188,8 +202,13 @@ impl InjectUser for Config {
     fn inject_tick(&mut self) {
         let mut side_effects = Vec::new();
         let time = (self.run_time().as_secs() / 60) as u32;
-        for inject in self.injects.iter_mut().filter(|i| !i.completed) {
-            if !inject.is_active(time) {
+        for inject in self
+            .injects
+            .iter_mut()
+            .filter(|i| !i.sticky && !i.completed)
+        {
+            if inject.is_ended(time) {
+                info!("Inject {} has ended", inject.name);
                 inject.completed = true;
                 side_effects.extend(inject.side_effects.clone());
             }
@@ -226,16 +245,22 @@ impl InjectUser for Config {
     fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError> {
         let team = self.teams.get(team).ok_or(ConfigError::DoesNotExist)?;
         let time = (self.run_time().as_secs() / 60) as u32;
+        // not active && not completed -> false
+        // completed && submitted -> false
+        // completed && !submitted -> true
+        // not completed -> true
         Ok(self
             .injects
             .iter()
+            .filter(|i| i.is_active(time) || i.completed || i.sticky)
             .filter(|i| {
                 !(team
                     .inject_responses
                     .iter()
                     .find(|res| res.inject_uuid == i.uuid)
                     .is_some()
-                    && !i.is_active(time))
+                    && i.completed)
+                    || i.sticky
             })
             .cloned()
             .collect())
@@ -251,6 +276,12 @@ impl InjectUser for Config {
             .position(|i| i.uuid == inject.uuid)
             .ok_or(ConfigError::DoesNotExist)?;
         self.injects[index] = inject;
+        // reevaluate completed
+        self.injects[index].completed = if self.injects[index].sticky {
+            false
+        } else {
+            self.injects[index].is_ended((self.run_time().as_secs() / 60) as u32)
+        };
         Ok(())
     }
     fn delete_inject(&mut self, inject_uuid: Uuid) -> Result<(), ConfigError> {
@@ -279,6 +310,7 @@ mod tests {
             side_effects: vec![],
             completed: false,
             file_type: None,
+            sticky: false,
         };
         let vec = &vec![("VARIABLE".to_string(), "test".to_string())];
         let html = inject.get_html(vec);
@@ -292,22 +324,25 @@ mod tests {
             markdown: "This is a test inject {{VARIABLE}}".to_string(),
             start: 0,
             duration: 0,
-            side_effects: vec![SideEffect::EditService(
-                "test".to_string(),
-                Service {
+            side_effects: vec![
+                SideEffect::EditService(
+                    "test".to_string(),
+                    Service {
+                        name: "test".to_string(),
+                        command: "test".to_string(),
+                        multiplier: 1,
+                    },
+                ),
+                SideEffect::DeleteService("test".to_string()),
+                SideEffect::AddService(Service {
                     name: "test".to_string(),
                     command: "test".to_string(),
                     multiplier: 1,
-                },
-            ), SideEffect::DeleteService("test".to_string()),
-            SideEffect::AddService(Service {
-                name: "test".to_string(),
-                command: "test".to_string(),
-                multiplier: 1,
-            })
+                }),
             ],
             completed: false,
             file_type: None,
+            sticky: false,
         };
         println!("{}", serde_json::to_string(&inject).unwrap());
     }
