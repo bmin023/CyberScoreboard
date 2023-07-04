@@ -62,7 +62,7 @@ async fn main() {
         .allow_headers(Any);
     let app = Router::new()
         .nest("/api", router::main_router())
-        .merge(SpaRouter::new("/", "public").index_file("../index.html"))
+        .merge(SpaRouter::new("/assets", "./public/assets").index_file("../index.html"))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
