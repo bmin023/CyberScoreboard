@@ -1,5 +1,6 @@
 import { Link, useParams } from "react-router-dom";
-import { useTeamInjects, useTeamScore } from "../Hooks/CtrlHooks";
+import { useTeamInjects, useTeamScore, useTime } from "../Hooks/CtrlHooks";
+import { InjectDesc } from "../types";
 import { formatDate } from "../util";
 
 const Scoreboard = () => {
@@ -10,13 +11,13 @@ const Scoreboard = () => {
     if (scoreError) return <div>Error!</div>;
     return (
         <div className="w-10/12 m-auto my-4">
-            <table className="bg-slate-50 dark:bg-zinc-800 w-full shadow-md rounded-xl overflow-clip dark:border dark:rounded-none">
+            <table className="bg-slate-50 dark:bg-zinc-800 w-full shadow-md rounded-xl overflow-clip dark:border dark:border-zinc-700">
                 <tbody>
                     {data.scores.map((score, index) => (
                         <tr key={data.services[index]}>
                             <td
                                 className={
-                                    "p-2 w-0 border-b font-medium text-xl " +
+                                    "p-2 w-0 border-b font-medium text-xl dark:border-zinc-700 dark:text-slate-50 " +
                                     (score.up ? "bg-green-500" : "bg-red-500")
                                 }
                             >
@@ -26,12 +27,12 @@ const Scoreboard = () => {
                                 up ? (
                                     <td
                                         key={data.services[index] + i}
-                                        className="bg-green-500 border-b"
+                                        className="bg-green-500 border-b dark:border-zinc-700"
                                     ></td>
                                 ) : (
                                     <td
                                         key={data.services[index] + i}
-                                        className="bg-red-500 border-b"
+                                        className="bg-red-500 border-b dark:border-zinc-700"
                                     ></td>
                                 )
                             )}
@@ -47,31 +48,69 @@ const Scoreboard = () => {
     );
 };
 
+const InjectHolder = ({ title, children }: { title: string, children: JSX.Element }) => {
+    return (
+        <div className="my-5">
+            <h2 className="text-2xl text-center font-bold mb-1">{title}</h2>
+            <div className="bg-slate-50 dark:bg-zinc-800 w-full shadow-md rounded-xl overflow-clip p-1 border border-zinc-700">
+                {children}
+            </div>
+        </div>
+    );
+}
+
 const Injects = () => {
     const { teamName } = useParams();
     const { injects, injectsLoading } = useTeamInjects(teamName);
+    const { time } = useTime();
+
+    const timeRemaining = (inject: InjectDesc) => {
+        const endTime = inject.start + inject.duration;
+        const timeLeft = endTime - time.minutes;
+        const plural = Math.abs(timeLeft) === 1 ? "" : "s";
+        if (timeLeft === 0) return "now";
+        if (timeLeft < 0) return `${-timeLeft} minute${plural} ago`;
+        return `in ${timeLeft} minute${plural}`;
+    }
+
     if (injectsLoading) return <div>Loading...</div>;
     return (
         <div className="w-10/12 m-auto my-4">
             {injects.active_injects.length > 0 &&
-                <div>
-                    <h2 className="text-2xl text-center font-bold">
-                        Active injects
-                    </h2>
-                    <table className="bg-slate-50 dark:bg-zinc-800 w-full shadow-md rounded-xl overflow-clip dark:border dark:rounded-none">
-                        <tbody>
+                <InjectHolder title="Active Injects">
+                        <ul>
                             {injects.active_injects.map((inject) => (
-                                <tr key={inject.name}>
-                                    <td className="p-2 w-0 border-b font-medium text-xl bg-green-500">
-                                        <Link to={`/team/${teamName}/inject/${inject.uuid}`}>
+                                <li key={inject.uuid}>
+                                    <Link className="flex text-lg font-semibold hover:underline underline-offset-2 px-5" to={`/team/${teamName}/inject/${inject.uuid}`}>
+                                        <p className="flex-grow">
                                             {inject.name}
-                                        </Link>
-                                    </td>
-                                </tr>
+                                            <span className="ml-1 text-sm font-light">
+                                                Due {timeRemaining(inject)}
+                                            </span>
+                                        </p>
+                                        {injects.completed_injects.find((response) => response.inject_uuid === inject.uuid) &&
+                                            <p className="text-right text-sm font-mono py-1">
+                                                Submitted
+                                            </p>
+                                        }
+                                    </Link>
+                                </li>
                             ))}
-                        </tbody>
-                    </table>
-                </div>
+                        </ul>
+                </InjectHolder>
+            }
+            {injects.completed_injects.length > 0 &&
+                <InjectHolder title="Submission History">
+                        <ul>
+                            {injects.completed_injects.sort((a, b) => (b.upload_time - a.upload_time)).map((response) => (
+                                <li className="underline-offset-2 px-5" key={response.uuid}>
+                                        <p>
+                                            Submitted {response.filename} to <Link to={`/team/${teamName}/inject/${response.inject_uuid}`} className="font-semibold underline">{response.name}</Link> at {formatDate(new Date(response.upload_time))} <span className="text-red-500">{response.late ? "(Late)" : ""}</span>
+                                        </p>
+                                </li>
+                            ))}
+                        </ul>
+                </InjectHolder>
             }
         </div>
     );

@@ -1,11 +1,21 @@
 import { useEffect, useRef } from "react";
 import { Link, useParams } from "react-router-dom";
-import { useTeamInject, useUploadInject } from "../Hooks/CtrlHooks";
+import { useTeamInject, useTime, useUploadInject } from "../Hooks/CtrlHooks";
+import { formatDate } from "../util";
 
 const TeamInject = () => {
     const { teamName, injectId } = useParams();
+    const { time } = useTime(5000);
     const ref = useRef<HTMLDivElement>(null);
     const { inject, injectError, injectLoading } = useTeamInject(teamName, injectId);
+    const getTimeRemaining = () => {
+        if (!inject) return 0;
+        const endTime = inject.desc.start + inject.desc.duration;
+        const minutes = endTime - time.minutes;
+        const seconds = 60 - time.seconds;
+        if (minutes <= 0) return "Done";
+        return `Due in ${minutes}:${seconds < 10 ? "0" : ""}${seconds}`;
+    };
     useEffect(() => {
         if (inject && ref.current) {
             ref.current.innerHTML = inject.html;
@@ -34,7 +44,8 @@ const TeamInject = () => {
                 {inject.desc.name}
             </h1>
             <p className="text-center text-xl font-mono">Start: {inject.desc.start} min, Duration: {inject.desc.duration} min</p>
-            <div className="prose mx-5 md:mx-auto prose-slate dark:prose-invert" ref={ref} />
+            <p className="text-center text-xl font-mono">{getTimeRemaining()}</p>
+            <div className="prose mx-5 mt-2 md:mx-auto prose-slate dark:prose-invert" ref={ref} />
             <UploadPane />
             <InjectHistory />
         </div>
@@ -57,7 +68,7 @@ const UploadPane = () => {
             <h2 className="text-3xl text-center font-extrabold m-2">
                 Upload Files
             </h2>
-            <form className="bg-slate-200 md:w-3/4 lg:w-1/2 mx-auto shadow-md p-3 rounded" method="post" encType="multipart/form-data" onSubmit={e => {
+            <form className="bg-slate-200 md:w-3/4 lg:w-1/2 mx-auto shadow-md p-3 rounded dark:bg-zinc-800" method="post" encType="multipart/form-data" onSubmit={e => {
                 e.preventDefault();
                 const formData = new FormData(e.currentTarget);
                 uploadInject(formData);
@@ -65,6 +76,7 @@ const UploadPane = () => {
                 <div className="flex justify-center">
                     <label className="mr-2" htmlFor="file">Choose File to Upload</label>
                     <input
+                        className="file:bg-slate-300 dark:file:bg-zinc-900 dark:file:text-slate-50 file:rounded file:shadow-md file:font-bold file:text-center file:hover:shadow-lg file:active:shadow-sm"
                         onChange={_ => {
                             if (submitButton.current)
                                 submitButton.current.disabled = !hasFile();
@@ -84,7 +96,7 @@ const UploadPane = () => {
                         : "Any"}</em>
                 </div>
                 <div className="flex justify-center mt-2">
-                    <button ref={submitButton} className="bg-slate-300 py-2 px-3 rounded shadow-md text-xl font-bold text-center disabled:shadow-none disabled:text-zinc-100 hover:shadow-lg active:shadow-sm">Submit</button>
+                    <button ref={submitButton} className="bg-slate-300 dark:bg-zinc-900 py-2 px-3 rounded shadow-md text-xl font-bold text-center disabled:shadow-none disabled:text-zinc-100 dark:disabled:text-zinc-500 hover:shadow-lg active:shadow-sm">Submit</button>
                 </div>
             </form>
         </section>
@@ -95,16 +107,17 @@ const InjectHistory = () => {
     const { teamName, injectId } = useParams();
     const { inject, injectLoading } = useTeamInject(teamName, injectId);
     if (injectLoading) return <div>Loading...</div>;
+    if (inject.history.length === 0) return <></>;
     return (
         <section className="p-5">
             <h2 className="text-3xl text-center font-extrabold m-2">
                 Upload History
             </h2>
-            <div className="bg-slate-200 md:w-3/4 lg:w-1/2 mx-auto shadow-md p-3 rounded">
-                <ul>
-                    {inject.history.map((response, i) => (
-                        <li key={response.uuid} className="font-semibold">
-                            Uploaded {response.filename} at {new Date(response.upload_time).toTimeString()}{response.late ? " (late)" : ""}
+            <div className="bg-slate-200 dark:bg-zinc-800 md:w-3/4 lg:w-1/2 mx-auto shadow-md p-3 rounded">
+                <ul className="px-3 list-disc">
+                    {inject.history.map((response) => (
+                        <li key={response.uuid}>
+                            Uploaded <span className="font-bold">{response.filename}</span> at {formatDate(new Date(response.upload_time))}<span className="text-red-500">{response.late ? " (Late)" : ""}</span>
                         </li>
                     ))}
                 </ul>

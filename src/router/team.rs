@@ -5,12 +5,12 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
-use tracing::info;
+use tracing::{error, info};
 use uuid::Uuid;
 
 use crate::{
     checker::{
-        injects::{Inject, InjectResponse},
+        injects::{Inject, InjectResponse, InjectUser},
         passwords::{get_password_groups, overwrite_passwords},
     },
     ConfigState,
@@ -51,6 +51,7 @@ async fn set_pw(
     }
 }
 
+#[tracing::instrument(skip(state, team, inject_uuid,multipart))]
 async fn upload_inject_response(
     State(state): State<ConfigState>,
     Path((team, inject_uuid)): Path<(String, Uuid)>,
@@ -63,13 +64,21 @@ async fn upload_inject_response(
         Some(filename) => filename.to_string(),
         None => "unknown".to_string(),
     };
-    let data = field.bytes().await.unwrap();
+    // handle unwrap
+    let data = field.bytes().await;
+    if data.is_err() {
+        error!(
+            "{} submitted file too large for inject {}",
+            team, inject_uuid
+        );
+        return StatusCode::PAYLOAD_TOO_LARGE;
+    }
     let mut config = state.write().await;
-    match config.submit_response(&team, inject_uuid, &filename, &data) {
+    match config.submit_response(&team, inject_uuid, &filename, &data.unwrap()) {
         Ok(_) => {
             info!("{} submitted response for inject {}", team, inject_uuid);
             StatusCode::OK
-        },
+        }
         Err(_) => StatusCode::NOT_FOUND,
     }
 }
@@ -145,8 +154,7 @@ async fn get_inject(
         .ok_or(StatusCode::NOT_FOUND)?;
     let team = config.teams.get(&team).ok_or(StatusCode::NOT_FOUND)?;
     let html = inject.get_html(&team.env);
-    let history = team
-        .get_reponses(inject_uuid);
+    let history = team.get_reponses(inject_uuid);
     Ok(Json(InjectData {
         desc: InjectDesc::from_inject(inject),
         html,

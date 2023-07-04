@@ -5,7 +5,7 @@ use handlebars::Handlebars;
 use markdown::to_html;
 
 use serde::{Deserialize, Serialize};
-use tracing::{info, debug};
+use tracing::{debug, error, info};
 
 use super::{Config, ConfigError, Service};
 
@@ -18,12 +18,24 @@ pub struct Inject {
     pub start: u32,
     /// Duration of inject in minutes
     pub duration: u32,
-    pub side_effects: Option<Vec<SideEffect>>,
+    pub side_effects: Vec<SideEffect>,
     pub completed: bool,
     pub file_type: Option<Vec<String>>,
 }
 
 impl Inject {
+    pub fn new(inject: CreateInject) -> Self {
+        Self {
+            uuid: Uuid::new_v4(),
+            name: inject.name,
+            markdown: inject.markdown,
+            start: inject.start,
+            duration: inject.duration,
+            side_effects: inject.side_effects,
+            completed: false,
+            file_type: inject.file_type,
+        }
+    }
     pub fn is_active(&self, minutes_since_start: u32) -> bool {
         minutes_since_start >= self.start && minutes_since_start < self.start + self.duration
     }
@@ -34,7 +46,7 @@ impl Inject {
             markdown: yaml.markdown,
             start: yaml.start,
             duration: yaml.duration,
-            side_effects: yaml.side_effects,
+            side_effects: yaml.side_effects.unwrap_or(vec![]),
             completed: false,
             file_type: yaml.file_type,
         }
@@ -75,6 +87,7 @@ impl Inject {
             late: self.completed,
             filename: filename.to_string(),
             upload_time: time,
+            name: self.name.clone(),
         })
     }
     pub fn get_html(&self, env: &Vec<(String, String)>) -> String {
@@ -138,10 +151,117 @@ struct YAMLInject {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InjectResponse {
     pub inject_uuid: Uuid,
+    pub name: String,
     pub uuid: Uuid,
     pub late: bool,
     pub filename: String,
     pub upload_time: u128,
+}
+
+#[derive(Deserialize, Clone, Debug)]
+pub struct CreateInject {
+    pub name: String,
+    pub markdown: String,
+    pub start: u32,
+    pub duration: u32,
+    pub side_effects: Vec<SideEffect>,
+    pub file_type: Option<Vec<String>>,
+}
+
+pub trait InjectUser {
+    fn inject_tick(&mut self);
+    fn submit_response(
+        &mut self,
+        team_name: &str,
+        inject_uuid: Uuid,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<(), ResponseError>;
+    fn get_inject(&self, inject_uuid: Uuid) -> Option<Inject>;
+    fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError>;
+    fn add_inject(&mut self, inject: CreateInject);
+    fn edit_inject(&mut self, inject: Inject) -> Result<(), ConfigError>;
+    fn delete_inject(&mut self, inject_uuid: Uuid) -> Result<(), ConfigError>;
+}
+
+impl InjectUser for Config {
+    fn inject_tick(&mut self) {
+        let mut side_effects = Vec::new();
+        let time = (self.run_time().as_secs() / 60) as u32;
+        for inject in self.injects.iter_mut().filter(|i| !i.completed) {
+            if !inject.is_active(time) {
+                inject.completed = true;
+                side_effects.extend(inject.side_effects.clone());
+            }
+        }
+        for effect in side_effects {
+            info!("Applying side effect: {:?}", effect);
+            if let Err(err) = effect.apply(self) {
+                error!("Error applying side effect: {:?}", err);
+            }
+        }
+    }
+    fn submit_response(
+        &mut self,
+        team_name: &str,
+        inject_uuid: Uuid,
+        filename: &str,
+        data: &[u8],
+    ) -> Result<(), ResponseError> {
+        if let Some(team) = self.teams.get_mut(team_name) {
+            if let Some(inject) = self.injects.iter_mut().find(|i| i.uuid == inject_uuid) {
+                let res = inject.new_response(team_name, filename, data)?;
+                team.inject_responses.push(res);
+                Ok(())
+            } else {
+                Err(ResponseError::InjectNotFound)
+            }
+        } else {
+            Err(ResponseError::TeamNotFound)
+        }
+    }
+    fn get_inject(&self, inject_uuid: Uuid) -> Option<Inject> {
+        self.injects.iter().find(|i| i.uuid == inject_uuid).cloned()
+    }
+    fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError> {
+        let team = self.teams.get(team).ok_or(ConfigError::DoesNotExist)?;
+        let time = (self.run_time().as_secs() / 60) as u32;
+        Ok(self
+            .injects
+            .iter()
+            .filter(|i| {
+                !(team
+                    .inject_responses
+                    .iter()
+                    .find(|res| res.inject_uuid == i.uuid)
+                    .is_some()
+                    && !i.is_active(time))
+            })
+            .cloned()
+            .collect())
+    }
+    fn add_inject(&mut self, inject: CreateInject) {
+        let inject = Inject::new(inject);
+        self.injects.push(inject);
+    }
+    fn edit_inject(&mut self, inject: Inject) -> Result<(), ConfigError> {
+        let index = self
+            .injects
+            .iter()
+            .position(|i| i.uuid == inject.uuid)
+            .ok_or(ConfigError::DoesNotExist)?;
+        self.injects[index] = inject;
+        Ok(())
+    }
+    fn delete_inject(&mut self, inject_uuid: Uuid) -> Result<(), ConfigError> {
+        let index = self
+            .injects
+            .iter()
+            .position(|i| i.uuid == inject_uuid)
+            .ok_or(ConfigError::DoesNotExist)?;
+        self.injects.remove(index);
+        Ok(())
+    }
 }
 
 // tests for html
@@ -156,7 +276,7 @@ mod tests {
             markdown: "This is a test inject {{VARIABLE}}".to_string(),
             start: 0,
             duration: 0,
-            side_effects: None,
+            side_effects: vec![],
             completed: false,
             file_type: None,
         };
@@ -164,5 +284,31 @@ mod tests {
         let html = inject.get_html(vec);
         assert_eq!(html, "<p>This is a test inject test</p>\n");
     }
+    #[test]
+    fn check_json_injects() {
+        let inject = Inject {
+            uuid: Uuid::new_v4(),
+            name: "Test Inject".to_string(),
+            markdown: "This is a test inject {{VARIABLE}}".to_string(),
+            start: 0,
+            duration: 0,
+            side_effects: vec![SideEffect::EditService(
+                "test".to_string(),
+                Service {
+                    name: "test".to_string(),
+                    command: "test".to_string(),
+                    multiplier: 1,
+                },
+            ), SideEffect::DeleteService("test".to_string()),
+            SideEffect::AddService(Service {
+                name: "test".to_string(),
+                command: "test".to_string(),
+                multiplier: 1,
+            })
+            ],
+            completed: false,
+            file_type: None,
+        };
+        println!("{}", serde_json::to_string(&inject).unwrap());
+    }
 }
-

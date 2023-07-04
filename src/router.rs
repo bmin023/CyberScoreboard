@@ -20,6 +20,7 @@ pub fn main_router() -> Router<ConfigState> {
         .route("/scores", get(scores))
         .route("/scores/:team", get(team_scores))
         .route("/upload", post(upload))
+        .route("/time", get(time))
 }
 
 #[derive(Serialize)]
@@ -33,6 +34,21 @@ struct ScoreBody {
     name: String,
     score: u32,
     ups: Vec<bool>,
+}
+
+#[derive(Serialize)]
+struct TimeBody {
+    minutes: u64,
+    seconds: u64,
+}
+
+async fn time(State(state): State<ConfigState>) -> Json<TimeBody> {
+    let config = state.read().await;
+    let runtime = config.run_time();
+    Json(TimeBody {
+        minutes: runtime.as_secs() / 60,
+        seconds: runtime.as_secs() % 60,
+    })
 }
 
 async fn scores(State(state): State<ConfigState>) -> Json<ScoreWrapper> {

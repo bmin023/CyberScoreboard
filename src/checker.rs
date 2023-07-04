@@ -12,14 +12,13 @@ pub mod passwords {
     };
 }
 pub mod injects {
-    pub use super::inject::{Inject, InjectResponse};
+    pub use super::inject::{Inject, InjectResponse, InjectUser, CreateInject};
 }
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use tokio::task::JoinSet;
-use tracing::{error, info};
-use uuid::Uuid;
+use tracing::error;
 
 use std::fmt::Display;
 use std::fs;
@@ -29,8 +28,6 @@ pub use base::{Score, Service, Team, TeamError};
 use inject::{load_injects, Inject};
 use password::{load_password_saves, validate_password_fs};
 use save::{autosave, load_save, save_config, validate_save_fs, SaveError};
-
-use self::inject::ResponseError;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -42,8 +39,6 @@ pub struct Config {
     last_start: Instant,
     #[serde(with = "serde_millis")]
     game_time: Duration,
-    // #[serde(skip)]
-    // to_delete: Vec<String>,
 }
 
 impl Config {
@@ -127,22 +122,6 @@ impl Config {
                 .collect();
         }
     }
-    pub fn inject_tick(&mut self) {
-        let mut side_effects = Vec::new();
-        let time = (self.run_time().as_secs() / 60) as u32;
-        for inject in self.injects.iter_mut().filter(|i| !i.completed) {
-            if !inject.is_active(time) {
-                inject.completed = true;
-                side_effects.extend(inject.side_effects.clone().unwrap_or_default());
-            }
-        }
-        for effect in side_effects {
-            info!("Applying side effect: {:?}", effect);
-            if let Err(err) = effect.apply(self) {
-                error!("Error applying side effect: {:?}", err);
-            }
-        }
-    }
     pub async fn score_tick(&mut self) {
         score_teams(self).await;
     }
@@ -210,50 +189,12 @@ impl Config {
         // self.to_delete.clear();
         // update injects
         for inject in other.injects {
-            if let Some(index) = self.injects.iter().position(|i| i.name == inject.name) {
+            if let Some(index) = self.injects.iter().position(|i| i.uuid == inject.uuid) {
                 self.injects[index] = inject;
             } else {
                 error!("Couldn't resolve inject: {}", inject.name);
             }
         }
-    }
-    pub fn submit_response(
-        &mut self,
-        team_name: &str,
-        inject_uuid: Uuid,
-        filename: &str,
-        data: &[u8],
-    ) -> Result<(), ResponseError> {
-        if let Some(team) = self.teams.get_mut(team_name) {
-            if let Some(inject) = self.injects.iter_mut().find(|i| i.uuid == inject_uuid) {
-                let res = inject.new_response(team_name, filename, data)?;
-                team.inject_responses.push(res);
-                Ok(())
-            } else {
-                Err(ResponseError::InjectNotFound)
-            }
-        } else {
-            Err(ResponseError::TeamNotFound)
-        }
-    }
-    pub fn get_inject(&self, inject_uuid: Uuid) -> Option<Inject> {
-        self.injects.iter().find(|i| i.uuid == inject_uuid).cloned()
-    }
-    pub fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError> {
-        let team = self.teams.get(team).ok_or(ConfigError::DoesNotExist)?;
-        let time = (self.run_time().as_secs() / 60) as u32;
-        Ok(self
-            .injects
-            .iter()
-            .filter(|i| {
-                !team.inject_responses
-                    .iter()
-                    .find(|res| res.inject_uuid == i.uuid)
-                    .is_some()
-                    && time >= i.start
-            })
-            .cloned()
-            .collect())
     }
 }
 

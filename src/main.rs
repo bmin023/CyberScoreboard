@@ -4,6 +4,7 @@ mod router;
 use axum::Router;
 use axum_extra::routing::SpaRouter;
 use checker::Config;
+use checker::injects::InjectUser;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time};
 use tower_http::cors::{Any, CorsLayer};
