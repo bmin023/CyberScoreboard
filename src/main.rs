@@ -24,6 +24,8 @@ async fn main() {
         )
         .with(tracing_subscriber::fmt::layer())
         .init();
+    let version = env!("CARGO_PKG_VERSION");
+    info!("Starting Scoreboard v{}", version);
     let state = Arc::new(RwLock::new(Config::new()));
     let score_state = Arc::clone(&state);
     tokio::spawn(async move {

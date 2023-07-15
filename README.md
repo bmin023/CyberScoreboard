@@ -67,7 +67,7 @@ Inject_1:
         - .pdf
     markdown: |
         # Your First Inject
-        You will submit a text file containing a flag you found in
+        You will submit a text file containing a flag you can find in
         {{ TEAM_FLAG_SERVER }}.
         It's funny writing markdown in yaml in markdown.
         **Good Luck!**
@@ -78,7 +78,7 @@ Inject_2:
     markdown: |
         # Welcome to the Game
         You're passwords are stored here:
-        [Passwords](https://{{ SB_URL }}/passwords/{{ TEAM_NAME }}.csv)
+        [Passwords](https://{{ SB_URL }}//downloads/passwords/{{ TEAM_NAME }}.csv)
 # A Side Effect Inject
 # This inject will:
 #  1. Delete the service named SSH
@@ -94,7 +94,7 @@ Inject_3:
     no_submit: true
     # The difference between deleting a service then adding it versus
     # editing it is that deleting it removes the history and the score
-    # (from the scoreboard's perspective. Then team keeps the points)
+    # (from the scoreboard's perspective. The team keeps the points)
     # while editing it keeps the history and stats from the old service.
     side_effects:
         - !DeleteService SSH
@@ -108,6 +108,9 @@ Inject_3:
               command: WEB/curlfind.sh $WEBSITE "This website is cool now"
               multiplier: 1
 ```
+The second example has a download link it it for extra files. This works because
+eveything in the resources/downloads folder is served at the url /downloads.
+
 # Passwords
 Credentials were a bit of a challenge to implement because the checks that use these credentials are entirely separate from the scoreboard.
 What I eventually decided on was that credentials would be stored in files in the resources/PW/TEAM_NAME file.
