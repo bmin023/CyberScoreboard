@@ -2,7 +2,11 @@ import axios from "axios";
 import { useMutation, useQuery, useQueryClient } from "react-query";
 import {
     AdminInfo,
+    CreateInject,
     EnvPayload,
+    Inject,
+    InjectData,
+    InjectRequest,
     PasswordBody,
     PasswordPayload,
     SavePayload,
@@ -12,6 +16,7 @@ import {
     TeamPayload,
     TeamScore,
     TestResult,
+    TimeData,
 } from "../types";
 
 const SCORE_REFETCH = 5000;
@@ -509,4 +514,159 @@ export const useUploadFile = () => {
     return {
         uploadFile: mutate,
     }
+}
+
+export const useUploadInject = (team: string | undefined, uuid: string | undefined) => {
+    const queryClient = useQueryClient();
+    const { mutate } = useMutation(async (formData: FormData) => {
+        await axios.post(`/team/${team}/injects/${uuid}/upload`, formData, {
+            headers: {
+                'Content-Type': 'multipart/form-data'
+            }
+        })
+        return;
+    }, {
+        onSettled: () => {
+            queryClient.invalidateQueries(["injects", team, uuid]);
+        }
+    });
+    return {
+        uploadInject: mutate,
+    }
+}
+
+export const useTeamInjects = (team: string | undefined) => {
+    if (team === undefined)
+        return {
+            injects: {
+                active_injects: [],
+                completed_injects: []
+            } as InjectRequest, injectsLoading: false, injectsError: true
+        };
+    const { data, isLoading, error } = useQuery(
+        ["injects", team],
+        async () => {
+            const res = await axios.get(`/team/${team}/injects`);
+            return res.data;
+        }
+    );
+    return {
+        injects: data as InjectRequest,
+        injectsLoading: isLoading,
+        injectsError: error,
+    };
+}
+
+export const useTeamInject = (team: string | undefined, uuid: string | undefined) => {
+    if (team === undefined || uuid === undefined)
+        return {
+            inject: {
+                desc: {
+                    uuid: "",
+                    name: "",
+                    start: 0,
+                    duration: 0,
+                    completed: false,
+                },
+                html: "",
+            } as InjectData, injectLoading: true, injectError: true
+        }
+    const { data, isLoading, error } = useQuery(
+        ["injects", team, uuid],
+        async () => {
+            const res = await axios.get(`/team/${team}/injects/${uuid}`);
+            return res.data;
+        }
+    );
+    return {
+        inject: data as InjectData,
+        injectLoading: isLoading,
+        injectError: error,
+    }
+}
+
+export const useTime = (refresh = 60000) => {
+    const { data } = useQuery("time", async () => {
+        const res = await axios.get("/time");
+        return res.data;
+    }, {
+        refetchInterval: refresh,
+        placeholderData: {
+            minutes: 0,
+            seconds: 0,
+            active: true,
+        } as TimeData
+    });
+    return {
+        time: data as TimeData,
+    };
+};
+
+export const useAdminInjects = () => {
+    const { data, isLoading, error } = useQuery(
+        "adminInjects",
+        async () => {
+            const res = await axios.get("/admin/injects");
+            return res.data;
+        }
+    );
+    return {
+        injects: data as Inject[],
+        injectsLoading: isLoading,
+        injectsError: error,
+    };
+}
+
+export const useAdminAddInject = () => {
+    const queryClient = useQueryClient();
+    const { mutate } = useMutation(
+        async (inject: CreateInject) => {
+            const res = await axios.post("/admin/injects", inject);
+            return res.data;
+        },
+        {
+            onSuccess: () => {
+                queryClient.invalidateQueries("adminInjects");
+            },
+        }
+    );
+    return {
+        addInject: mutate,
+    };
+}
+
+export const useAdminEditInject = () => {
+    const queryClient = useQueryClient();
+    const { mutate } = useMutation(
+        async (inject: Inject) => {
+            const res = await axios.post(`/admin/injects/${inject.uuid}`, inject);
+            return res.data;
+        },
+        {
+            onSuccess: () => {
+                queryClient.invalidateQueries("adminInjects");
+            },
+        }
+    );
+    return {
+        editInject: mutate,
+    };
+}
+
+export const useAdminDeleteInject = () => {
+    const queryClient = useQueryClient();
+    const { mutate } = useMutation(
+        async (uuid: string) => {
+            const res = await axios.delete(`/admin/injects/${uuid}`);
+            return res.data;
+        },
+        {
+            onSuccess: () => {
+                queryClient.invalidateQueries("adminInjects");
+            },
+        }
+    );
+    return {
+        deleteInject: mutate as (uuid: string) => Promise<void>,
+    };
 }

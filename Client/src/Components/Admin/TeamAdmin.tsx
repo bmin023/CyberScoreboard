@@ -10,9 +10,9 @@ import {
   useAdminPasswords,
   useWritePasswords,
   useDeletePasswords,
-} from "../Hooks/CtrlHooks";
-import NaiveShrinker from "./NaiveShrinker";
-import { Shrinker } from "./Shrinker";
+} from "../../Hooks/CtrlHooks";
+import NaiveShrinker from "../NaiveShrinker";
+import { Shrinker } from "../Shrinker";
 
 interface IEnvDisplayProps {
   team: string;
@@ -70,7 +70,7 @@ interface ITeamDisplayProps {
 
 const PasswordDisplay: React.FC<{ team: string }> = ({ team }) => {
   const { passwords, passwordsError, passwordsLoading } =
-    useAdminPasswords(team, (data) => {
+    useAdminPasswords(team, (_) => {
       setSaved(true)
     });
   const { writePasswords } = useWritePasswords(team);
@@ -164,7 +164,7 @@ const PasswordDisplay: React.FC<{ team: string }> = ({ team }) => {
           onChange={(e) => {
             loadPasswords(e.target.value);
           }}
-          className="bg-slate-300 mx-1 font-light outline outline-1 rounded px-0.5 outline-slate-400"
+          className="bg-slate-300 mx-1 font-light outline outline-1 rounded px-0.5 outline-slate-400 dark:bg-zinc-800"
         >
           {passwords.map((group) => (
             <option key={group.group} value={group.group}>
@@ -178,14 +178,14 @@ const PasswordDisplay: React.FC<{ team: string }> = ({ team }) => {
             placeholder="New Group"
             value={group}
             onChange={(e) => setGroup(e.target.value)}
-            className="bg-slate-200 px-0.5 rounded shadow"
+            className="bg-slate-200 dark:bg-zinc-900 px-0.5 rounded shadow"
           />
         )}
         <input
           onClick={() => onSubmit()}
           type="submit"
           value="Save"
-          className="ml-auto bg-slate-200 px-2 rounded shadow"
+          className="ml-auto bg-slate-200 px-2 rounded shadow dark:bg-zinc-800 dark:border border-slate-400"
         />
         {!newGroup && (
           <button
@@ -197,7 +197,7 @@ const PasswordDisplay: React.FC<{ team: string }> = ({ team }) => {
         )}
       </div>
       <textarea
-        className="p-2 h-40 w-40 bg-slate-200 text-sm shadow-inner rounded-md m-1 font-mono resize"
+        className="p-2 h-40 w-40 bg-slate-200 text-sm shadow-inner rounded-md m-1 font-mono resize dark:bg-zinc-800 dark:border border-slate-400"
         value={newPasswords}
         spellCheck={false}
         onChange={(e) => {

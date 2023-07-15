@@ -71,3 +71,54 @@ export interface SaveWrapper {
 export interface SavePayload {
     name: string,
 }
+
+export interface Inject {
+    uuid: string,
+    name: string,
+    markdown: string,
+    start: number,
+    duration: number,
+    completed: boolean,
+    side_effects: SideEffect[],
+    file_type: string[] | null,
+    sticky: boolean,
+}
+
+export interface SideEffect {
+    [key: string]: any
+}
+export interface InjectDesc {
+    uuid: string,
+    name: string,
+    start: number,
+    duration: number,
+    completed: boolean,
+    file_type: string[] | null,
+    sticky: boolean,
+}
+export interface InjectResponse {
+    uuid: string,
+    inject_uuid: string,
+    late: boolean,
+    filename: string,
+    upload_time: number,
+    name: string,
+}
+export interface InjectRequest {
+    active_injects: InjectDesc[],
+    completed_injects: InjectResponse[]
+}
+
+export type CreateInject = Omit<Inject, 'uuid' | 'completed'>;
+
+export interface InjectData {
+    desc: InjectDesc,
+    html: string,
+    history: InjectResponse[]
+}
+
+export interface TimeData {
+    minutes: number,
+    seconds: number,
+    active: boolean,
+}

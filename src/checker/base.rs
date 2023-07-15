@@ -1,16 +1,17 @@
 use std::{
-    collections::{BTreeMap, VecDeque}, time::Duration,
+    collections::{BTreeMap, VecDeque},
+    time::Duration,
 };
 
 use tokio::{process::Command, time::timeout};
 
 use serde::{Deserialize, Serialize};
+use tracing::debug;
+use uuid::Uuid;
 
 use super::inject::InjectResponse;
 
-
-
-#[derive(Serialize, Deserialize, Clone, Default)]
+#[derive(Serialize, Deserialize, Clone, Default, Debug)]
 pub struct Score {
     pub score: u32,
     pub up: bool,
@@ -35,10 +36,11 @@ impl Service {
     pub fn is_valid(&self) -> bool {
         return self.name != "" && self.command != "";
     }
+    #[tracing::instrument]
     pub async fn check_with_env(&self, env: &Vec<(String, String)>) -> Result<TestOutput, ()> {
         // get PATH from env
         let path = std::env::var("PATH").unwrap_or("/usr/bin:/bin:/usr/sbin:/sbin".to_string());
-        let output = Command::new("sh")
+        let output = Command::new("bash")
             .current_dir("./resources")
             .arg("-c")
             .arg(&self.command)
@@ -47,6 +49,7 @@ impl Service {
             .envs(env.clone())
             .output();
         let Ok(res) = timeout(Duration::from_secs(5), output).await else {
+            debug!("{} timed out", self.name);
             return Ok(TestOutput {
                 up: false,
                 message: "".to_string(),
@@ -56,6 +59,13 @@ impl Service {
         let Ok(res) = res else {
             return Err(());
         };
+        debug!(
+            "{} is {}. stdout:{} stderr:{}",
+            self.name,
+            if res.status.success() { "UP" } else { "DOWN" },
+            String::from_utf8_lossy(&res.stdout),
+            String::from_utf8_lossy(&res.stderr)
+        );
         Ok(TestOutput {
             up: res.status.success(),
             message: String::from_utf8_lossy(&res.stdout).to_string(),
@@ -70,7 +80,7 @@ pub struct TestOutput {
     pub error: String,
 }
 
-#[derive(Serialize, Deserialize, Clone)]
+#[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Team {
     pub scores: BTreeMap<String, Score>,
     pub env: Vec<(String, String)>,
@@ -81,10 +91,16 @@ impl Team {
     pub fn score(&self) -> u32 {
         self.scores.iter().map(|(_, s)| s.score).sum()
     }
+    pub fn get_reponses(&self, inject_uuid: Uuid) -> Vec<InjectResponse> {
+        self.inject_responses
+            .iter()
+            .filter(|r| r.inject_uuid == inject_uuid)
+            .cloned()
+            .collect()
+    }
 }
 
 pub enum TeamError {
     InvalidName,
     AlreadyExists,
 }
-

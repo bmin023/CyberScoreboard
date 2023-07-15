@@ -7,9 +7,11 @@ use axum::{
     Json, Router,
 };
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 
 use crate::{
-    checker::{passwords, saves, Config, ConfigError, Service, TeamError},
+    checker::{passwords, saves, injects, Config, ConfigError, Service, TeamError},
+    checker::injects::InjectUser,
     ConfigState,
 };
 
@@ -35,6 +37,8 @@ pub fn admin_router() -> Router<ConfigState> {
         .route("/reset", post(reset_scores))
         .route("/saves", get(get_saves).post(save))
         .route("/saves/load", post(load_save))
+        .route("/injects", get(get_injects).post(add_inject))
+        .route("/injects/:inject_uuid", post(edit_inject).delete(delete_inject))
 }
 
 #[derive(Serialize)]
@@ -416,3 +420,46 @@ async fn load_save(
     *old_config = config;
     StatusCode::OK
 }
+
+async fn get_injects(
+    State(state): State<ConfigState>,
+) -> Result<Json<Vec<injects::Inject>>, StatusCode> {
+    let config = state.read().await;
+    Ok(Json(config.injects.clone()))
+}
+
+async fn add_inject(
+    State(state): State<ConfigState>,
+    Json(payload): Json<injects::CreateInject>,
+) -> StatusCode {
+    let mut config = state.write().await;
+    config.add_inject(payload);
+    StatusCode::OK
+}
+
+async fn edit_inject(
+    State(state): State<ConfigState>,
+    Path(inject_uuid): Path<Uuid>,
+    Json(payload): Json<injects::Inject>
+) -> StatusCode {
+    if payload.uuid != inject_uuid {
+        return StatusCode::BAD_REQUEST;
+    }
+    let mut config = state.write().await;
+    match config.edit_inject(payload) {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::NOT_FOUND,
+    }
+}
+
+async fn delete_inject(
+    State(state): State<ConfigState>,
+    Path(inject_uuid): Path<Uuid>,
+) -> StatusCode {
+    let mut config = state.write().await;
+    match config.delete_inject(inject_uuid) {
+        Ok(_) => StatusCode::OK,
+        Err(_) => StatusCode::NOT_FOUND,
+    }
+}
+

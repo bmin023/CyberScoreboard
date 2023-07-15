@@ -11,11 +11,14 @@ pub mod passwords {
         write_passwords, PasswordSave,
     };
 }
+pub mod injects {
+    pub use super::inject::{CreateInject, Inject, InjectResponse, InjectUser};
+}
 
 use serde::{Deserialize, Serialize};
 use std::collections::BTreeMap;
 use tokio::task::JoinSet;
-use tracing::{error, info};
+use tracing::error;
 
 use std::fmt::Display;
 use std::fs;
@@ -25,8 +28,6 @@ pub use base::{Score, Service, Team, TeamError};
 use inject::{load_injects, Inject};
 use password::{load_password_saves, validate_password_fs};
 use save::{autosave, load_save, save_config, validate_save_fs, SaveError};
-
-use self::inject::ResponseError;
 
 #[derive(Clone, Serialize, Deserialize)]
 pub struct Config {
@@ -38,8 +39,6 @@ pub struct Config {
     last_start: Instant,
     #[serde(with = "serde_millis")]
     game_time: Duration,
-    // #[serde(skip)]
-    // to_delete: Vec<String>,
 }
 
 impl Config {
@@ -123,22 +122,6 @@ impl Config {
                 .collect();
         }
     }
-    pub fn inject_tick(&mut self) {
-        let mut side_effects = Vec::new();
-        let time = (self.run_time().as_secs() / 60) as u32;
-        for inject in self.injects.iter_mut().filter(|i| !i.completed) {
-            if time >= inject.start + inject.duration {
-                inject.completed = true;
-                side_effects.extend(inject.side_effects.clone().unwrap_or_default());
-            }
-        }
-        for effect in side_effects {
-            info!("Applying side effect: {:?}", effect);
-            if let Err(err) = effect.apply(self) {
-                error!("Error applying side effect: {:?}", err);
-            }
-        }
-    }
     pub async fn score_tick(&mut self) {
         score_teams(self).await;
     }
@@ -206,24 +189,18 @@ impl Config {
         // self.to_delete.clear();
         // update injects
         for inject in other.injects {
-            if let Some(index) = self.injects.iter().position(|i| i.name == inject.name) {
-                self.injects[index] = inject;
+            if let Some(index) = self.injects.iter().position(|i| i.uuid == inject.uuid) {
+                if (inject.completed && !self.injects[index].completed)
+                    && self.injects[index].is_ended((self.run_time().as_secs() / 60) as u32)
+                {
+                    self.injects[index].completed = true;
+                }
             } else {
-                error!("Couldn't resolve inject: {}", inject.name);
+                error!(
+                    "Couldn't resolve inject: {}. It was probably removed during a score tick.",
+                    inject.name
+                );
             }
-        }
-    }
-    pub fn submit_response(&mut self, team_name: &str, inject: &str, extension: &str, data: &[u8]) -> Result<(),ResponseError> {
-        if let Some(team) = self.teams.get_mut(team_name) {
-            if let Some(inject) = self.injects.iter().find(|i| i.name == inject) {
-                let res = inject.new_response(team_name,extension, data)?;
-                team.inject_responses.push(res);
-                Ok(())
-            } else {
-                Err(ResponseError::InjectNotFound)
-            }
-        } else {
-            Err(ResponseError::TeamNotFound)
         }
     }
 }
