@@ -3,12 +3,13 @@ mod router;
 
 use axum::Router;
 use axum_extra::routing::SpaRouter;
-use checker::Config;
 use checker::injects::InjectUser;
+use checker::Config;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time};
 use tower_http::cors::{Any, CorsLayer};
 use tower_http::trace::TraceLayer;
+use tower_http::services::ServeDir;
 use tracing::{debug, error, info, info_span};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
@@ -55,12 +56,15 @@ async fn main() {
             }
         }
     });
+    let download_dir = ServeDir::new("./resources/downloads");
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
         .allow_methods(Any)
         .allow_headers(Any);
+
     let app = Router::new()
+        .nest_service("/downloads", download_dir)
         .nest("/api", router::main_router())
         .merge(SpaRouter::new("/assets", "./public/assets").index_file("../index.html"))
         .layer(cors)

@@ -153,6 +153,7 @@ impl SideEffect {
 struct YAMLInject {
     markdown: String,
     file_types: Option<Vec<String>>,
+    #[serde(default)]
     start: u32,
     duration: Option<u32>,
     side_effects: Option<Vec<SideEffect>>,

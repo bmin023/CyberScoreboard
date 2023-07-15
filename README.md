@@ -46,7 +46,7 @@ In the background, the scoreboard runs each checker multiple times, once for eac
 # Customizing your injects.yaml
 The injects.yaml file is the only not required file of the main configs. It is also the most involved. It is formatted in the same manner where
 you have a name followed by its values, but there are many more values.
-- start: How many minutes into the game the inject should start
+- start: How many minutes into the game the inject should start. By default, it starts at the beginning of the game.
 - duration: How many minutes the inject should last. If not present, the inject will be marked as sticky and will not end.
 - file_types: A list of file extensions that the inject will accept as submissions. If not present, the inject will accept any file type.
 - no_submit: A boolean. If true, the inject will not accept submissions. False by default.
@@ -74,12 +74,11 @@ Inject_1:
 # A Sticky Notification
 # You can create links as well, which can be useful for downloading files.
 Inject_2:
-    start: 0
+    no_submit: true
     markdown: |
         # Welcome to the Game
         You're passwords are stored here:
         [Passwords](https://{{ SB_URL }}/passwords/{{ TEAM_NAME }}.csv)
-    no_submit: true
 # A Side Effect Inject
 # This inject will:
 #  1. Delete the service named SSH

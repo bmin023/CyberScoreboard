@@ -26,21 +26,33 @@ const Injects = () => {
                         <div className="pl-7">
                             <InjectEditor inject={inject} onSubmit={(submittable) => {
                                 editInject(submittable);
-                            }} />
+                            }} onDelete={(uuid)=>deleteInject(uuid)} />
                         </div>
                     </details>
                 </div>
             ))}
+            <div className="m-1">
+                <details>
+                    <summary className="font-bold">Add Inject</summary>
+                    <div className="pl-7">
+                        <InjectEditor inject={{ uuid: "newinject", name: "New Inject", start: 0, duration: 0, file_type: null, markdown: "", side_effects: [], completed: false, sticky: false }} onSubmit={(submittable) => {
+                            addInject(submittable);
+                        }} submitText="Add" />
+                    </div>
+                </details>
+            </div>
         </div>
     );
 };
 
 interface InjectEditorProps {
     inject: Inject;
+    submitText?: string;
+    onDelete?: (uuid: string) => void;
     onSubmit?: (inject: Inject) => void;
 }
 
-const InjectEditor = ({ inject, onSubmit }: InjectEditorProps) => {
+const InjectEditor = ({ inject, onSubmit, submitText, onDelete }: InjectEditorProps) => {
     const [name, setName] = useState(inject.name);
     const [start, setStart] = useState(inject.start);
     const [duration, setDuration] = useState(inject.duration);
@@ -184,7 +196,10 @@ const InjectEditor = ({ inject, onSubmit }: InjectEditorProps) => {
                     </div>
                 </div>
             </details>
-            <button disabled={!hasChanged()} onClick={submit} className="bg-slate-200 w-full px-1 rounded shadow-sm hover:shadow-md active:shadow-sm disabled:shadow-none disabled:bg-opacity-50 disabled:text-slate-400 dark:bg-zinc-600">Save</button>
+            <div className="flex gap-2">
+                <button disabled={!hasChanged()} onClick={submit} className="bg-slate-200 w-full px-1 rounded shadow-sm hover:shadow-md active:shadow-sm disabled:shadow-none disabled:bg-opacity-50 disabled:text-slate-400 dark:bg-zinc-600">{submitText ?? "Save"}</button>
+                { onDelete && <button onClick={()=>onDelete(inject.uuid)} className="bg-slate-200 w-full px-1 rounded shadow-sm hover:shadow-md active:shadow-sm dark:bg-zinc-600">Delete</button>}
+            </div>
         </div>
     );
 }

@@ -667,6 +667,6 @@ export const useAdminDeleteInject = () => {
         }
     );
     return {
-        deleteInject: mutate,
+        deleteInject: mutate as (uuid: string) => Promise<void>,
     };
 }
