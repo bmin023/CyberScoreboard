@@ -26,11 +26,11 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(name: String, command: String) -> Self {
+    pub fn new(name: String, command: String, multiplier: u8) -> Self {
         Service {
             name,
             command,
-            multiplier: 1,
+            multiplier,
         }
     }
     pub fn is_valid(&self) -> bool {
