@@ -13,8 +13,6 @@ use tower_http::services::ServeDir;
 use tracing::{debug, error, info, info_span};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
-use crate::checker::resource_location;
-
 pub type ConfigState = Arc<RwLock<Config>>;
 
 #[tokio::main]
@@ -60,7 +58,7 @@ async fn main() {
             }
         }
     });
-    let download_dir = ServeDir::new(format!("{}/downloads", resource_location()));
+    let download_dir = ServeDir::new("./resources/downloads");
 
     let cors = CorsLayer::new()
         .allow_origin(Any)
@@ -74,9 +72,7 @@ async fn main() {
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
-
-    let port = std::env::var("SB_PORT").unwrap_or_else(|_| "8000".to_string());
-    let addr = SocketAddr::from(([127, 0, 0, 1], port.parse::<u16>().expect("Invalid Port")));
+    let addr = SocketAddr::from(([127, 0, 0, 1], 8000));
 
     info!("Listening on http://{}", addr);
     axum::Server::bind(&addr)

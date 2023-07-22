@@ -7,8 +7,6 @@ use markdown::to_html;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
-use crate::checker::resource_location;
-
 use super::{Config, ConfigError, Service};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
@@ -24,10 +22,6 @@ pub struct Inject {
     pub completed: bool,
     pub file_type: Option<Vec<String>>,
     pub sticky: bool,
-}
-
-fn team_inject_dir(team_name: &str) -> String {
-    format!("resources/injects/{}", team_name)
 }
 
 impl Inject {
@@ -79,7 +73,7 @@ impl Inject {
         data: &[u8],
     ) -> Result<InjectResponse, ResponseError> {
         // check if folder exists
-        let path = team_inject_dir(team_name);
+        let path = format!("resources/injects/{}", team_name);
         fs::create_dir_all(path).map_err(|_| ResponseError::FileError)?;
         let extension = match filename.split(".").last() {
             Some(ext) => format!(".{}", ext),
@@ -90,7 +84,7 @@ impl Inject {
         } else {
             format!("{}_response{}", self.format_name(), extension)
         };
-        let path = format!("{}/{}", team_inject_dir(team_name), new_filename);
+        let path = format!("resources/injects/{}/{}", team_name, new_filename);
         let mut file = fs::File::create(path).map_err(|_| ResponseError::FileError)?;
         file.write_all(data).map_err(|_| ResponseError::FileError)?;
         let time = SystemTime::now()
@@ -124,12 +118,11 @@ pub enum ResponseError {
 }
 
 pub fn load_injects() -> Vec<Inject> {
-    let inject_file = std::env::var("SB_INJECTS").unwrap_or("injects.yaml".to_string());
-    let Ok(file) = fs::read_to_string(format!("{}/{}",resource_location(),inject_file)) else {
+    let Ok(file) = fs::read_to_string("resources/injects.yaml") else {
         return Vec::new();
     };
     let yaml_tree: BTreeMap<String, YAMLInject> =
-        serde_yaml::from_str(&file).expect("injects file is not valid");
+        serde_yaml::from_str(&file).expect("injects.yaml is not valid");
     let injects: Vec<Inject> = yaml_tree
         .into_iter()
         .map(|(name, inject)| Inject::from_yaml(name, inject))

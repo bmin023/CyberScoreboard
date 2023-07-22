@@ -1,9 +1,9 @@
 use std::{time::{SystemTime, UNIX_EPOCH}, collections::BTreeMap, fs};
 
 use serde::{Serialize, Deserialize};
-use tracing::{error, info};
+use tracing::error;
 
-use super::{passwords::{PasswordSave, get_password_groups, get_passwords}, resource_location};
+use super::passwords::{PasswordSave, get_password_groups, get_passwords};
 
 use super::Config;
 
@@ -57,7 +57,7 @@ pub fn save_config(config: &Config, file_name: &str) -> Result<(), SaveError> {
         config: config.clone(),
         passwords,
     };
-    let Ok(file) = fs::File::create(format!("{}/save/{}.json", resource_location(), file_name)) else {
+    let Ok(file) = fs::File::create(format!("resources/save/{}.json", file_name)) else {
         error!("Error opening save file resources/save/{}.json",file_name);
         return Err(SaveError::WriteError);
     };
@@ -78,7 +78,7 @@ pub fn autosave(config: &Config) -> Result<(), SaveError> {
 }
 
 pub fn load_save(file_name: &str) -> Result<Save, SaveError> {
-    let Ok(file) = fs::File::open(format!("{}/save/{}.json",resource_location(), file_name)) else {
+    let Ok(file) = fs::File::open(format!("resources/save/{}.json", file_name)) else {
         error!("Error opening save file resources/save/{}.json",file_name);
         return Err(SaveError::ReadError);
     };
@@ -90,7 +90,7 @@ pub fn load_save(file_name: &str) -> Result<Save, SaveError> {
 
 pub fn get_save_names() -> Vec<String> {
     let mut names = Vec::new();
-    if let Ok(entries) = fs::read_dir(format!("{}/save",resource_location())) {
+    if let Ok(entries) = fs::read_dir("resources/save") {
         for entry in entries {
             if let Ok(entry) = entry {
                 if let Ok(file_type) = entry.file_type() {
@@ -110,7 +110,7 @@ pub fn get_save_names() -> Vec<String> {
 
 pub fn get_autosave_names() -> Vec<String> {
     let mut names = Vec::new();
-    if let Ok(entries) = fs::read_dir(format!("{}/save/autosave",resource_location())) {
+    if let Ok(entries) = fs::read_dir("resources/save/autosave") {
         for entry in entries {
             if let Ok(entry) = entry {
                 if let Ok(file_type) = entry.file_type() {
@@ -130,8 +130,7 @@ pub fn get_autosave_names() -> Vec<String> {
 
 pub fn validate_save_fs() {
     // make sure the save directory exists
-    if let Err(e) = fs::create_dir_all(format!("{}/save/autosave", resource_location())) {
+    if let Err(e) = fs::create_dir_all("resources/save/autosave") {
         error!("Error creating save directory resources/save/autosave: {}", e);
     }
-    info!("Created Save Directory");
 }

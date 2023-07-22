@@ -1,11 +1,9 @@
 use std::{str::FromStr, collections::BTreeMap};
 
 use serde::{Serialize, Deserialize};
-use tracing::{error, info};
+use tracing::error;
 
 use crate::checker::Config;
-
-use super::resource_location;
 
 #[derive(Debug)]
 pub struct UserPass {
@@ -47,17 +45,17 @@ pub struct PasswordSave {
 
 pub fn load_password_saves(save: &BTreeMap<String,Vec<PasswordSave>>) {
     // clear the PW directory
-    if let Err(err) = std::fs::remove_dir_all(password_dir()) {
-        error!("Error removing directory {}: {}",password_dir(), err);
+    if let Err(err) = std::fs::remove_dir_all("./resources/PW") {
+        error!("Error removing directory ./resources/PW: {}", err);
     }
-    if let Err(err) = std::fs::create_dir(password_dir()) {
-        error!("Error creating directory {}: {}", password_dir(), err);
+    if let Err(err) = std::fs::create_dir("./resources/PW") {
+        error!("Error creating directory ./resources/PW: {}", err);
     }
 
     for (team,save) in save.iter() {
         // create the team directory
-        if let Err(err) = std::fs::create_dir(team_password_dir(team)) {
-            error!("Error creating directory {}: {}", team_password_dir(team), err);
+        if let Err(err) = std::fs::create_dir(format!("./resources/PW/{}", team)) {
+            error!("Error creating directory ./resources/PW/{}: {}", team, err);
         }
         for password in save {
             if let Err(err) = write_passwords(team, &password.group, &password.passwords) {
@@ -74,7 +72,7 @@ pub enum PasswordError {
 }
 
 pub fn validate_password_fs(config: &Config) {
-    let mut path = std::path::PathBuf::from(password_dir());
+    let mut path = std::path::PathBuf::from("./resources/PW");
     if !path.exists() {
         std::fs::create_dir(&path).unwrap();
     }
@@ -94,10 +92,8 @@ pub fn validate_password_fs(config: &Config) {
         if let Ok(entry) = entry {
             if let Some(filename) = entry.file_name().to_str() {
                 if !config.teams.contains_key(filename) {
-                    if let Err(err) = std::fs::remove_dir_all(team_password_dir(&filename.to_string())) {
+                    if let Err(err) = std::fs::remove_dir_all(format!("./resources/PW/{}", filename)) {
                         error!("Error removing directory: {}", err);
-                    } else {
-                        info!("Removed directory of nonexistent team: {}", filename);
                     }
                 }
             }
@@ -106,13 +102,13 @@ pub fn validate_password_fs(config: &Config) {
 }
 
 pub fn remove_password_group(team: &String, group: &String) -> Result<(), PasswordError> {
-    let path = format!("{}/{}.pw", team_password_dir(team), group);
+    let path = format!("./resources/PW/{}/{}.pw", team, group);
     std::fs::remove_file(path).map_err(|_| PasswordError::InvalidFile)?;
     Ok(())
 }
 
 pub fn get_password_groups(team: &String) -> Result<Vec<String>, PasswordError> {
-    let path = team_password_dir(team);
+    let path = format!("./resources/PW/{}", team);
     let mut groups = Vec::new();
     if let Ok(dir) = std::fs::read_dir(path) {
         for entry in dir {
@@ -132,7 +128,7 @@ pub fn get_password_groups(team: &String) -> Result<Vec<String>, PasswordError> 
 }
 
 pub fn get_passwords(team: &String, group: &String) -> Result<String, PasswordError> {
-    let path = format!("{}/{}.pw", team_password_dir(team), group);
+    let path = format!("./resources/PW/{}/{}.pw", team, group);
     let contents = std::fs::read_to_string(path).map_err(|_| PasswordError::InvalidFile)?;
     Ok(contents)
 }
@@ -141,8 +137,8 @@ fn read_passwords(
     team_name: &String,
     group: &String,
 ) -> Result<Vec<UserPass>, PasswordError> {
-    // Read the file at resources/PW/<team_name>/<password_file>.pw
-    let path = format!("{}/{}.pw", team_password_dir(team_name), group);
+    // Read the file at ./resources/PW/<team_name>/<password_file>.pw
+    let path = format!("./resources/PW/{}/{}.pw", team_name, group);
     let contents = std::fs::read_to_string(path).map_err(|_| PasswordError::InvalidFile)?;
     let passwords = parse_passwords(&contents);
     Ok(passwords)
@@ -153,7 +149,7 @@ pub fn write_passwords(
     group: &String,
     passwords: &String,
 ) -> Result<(), PasswordError> {
-    let path = format!("{}/{}.pw", team_password_dir(team_name), group);
+    let path = format!("./resources/PW/{}/{}.pw", team_name, group);
     // I know this looks stupid.
     // But we want to parse the passwords to make sure they are valid before we write them to the file.
     let contents = passwords_to_string(&parse_passwords(&passwords));
@@ -166,7 +162,7 @@ pub fn overwrite_passwords(
     group: &String,
     passwords: &String,
 ) -> Result<(), PasswordError> {
-    let path = format!("{}/{}.pw",team_password_dir(team_name), group);
+    let path = format!("./resources/PW/{}/{}.pw", team_name, group);
     let mut old_passwords = read_passwords(team_name, group)?;
     for password in parse_passwords(passwords) {
         if let Some(index) = old_passwords.iter().position(|p| p.username == password.username) {
@@ -191,12 +187,4 @@ fn passwords_to_string(passwords: &Vec<UserPass>) -> String {
         password_string.push_str("\n");
     }
     password_string
-}
-
-fn password_dir() -> String {
-    format!("{}/PW", resource_location())
-}
-
-fn team_password_dir(team: &String) -> String {
-    format!("{}/{}",password_dir(),team)
 }

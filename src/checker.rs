@@ -230,11 +230,10 @@ pub enum ConfigError {
 }
 
 fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
-    let team_file = std::env::var("SB_TEAMS").unwrap_or_else(|_| "teams.yaml".to_string());
-    let file = fs::read_to_string(format!("{}/{}",resource_location(), team_file))
-        .expect(format!("{} should be in the resources directory", team_file).as_str());
+    let file = fs::read_to_string("resources/teams.yaml")
+        .expect("teams.yaml should be in the resources directory");
     let teams = serde_yaml::from_str::<BTreeMap<String, BTreeMap<String, String>>>(&file)
-        .expect(format!("{} should be formatted correctly", team_file).as_str());
+        .expect("teams.yaml should be correctly formatted");
     let teams = teams
         .iter()
         .map(|(name, env)| {
@@ -258,33 +257,14 @@ fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
     teams
 }
 
-#[derive(Deserialize)]
-struct ServiceYaml {
-    command: String,
-    multiplier: u8,
-}
-#[derive(Deserialize)]
-#[serde(untagged)]
-enum ServiceYamlForms {
-    Command(String),
-    Full(ServiceYaml),
-}
 fn load_services() -> Vec<Service> {
-    let service_file = std::env::var("SB_SERVICES").unwrap_or_else(|_| "services.yaml".to_owned());
-    let file = fs::read_to_string(format!("{}/{}",resource_location(),service_file))
-        .expect(format!("{} should be in the resources directory", service_file).as_str());
-    let yaml_services = serde_yaml::from_str::<BTreeMap<String, ServiceYamlForms>>(&file)
-        .expect(format!("{} should be formatted correctly", service_file).as_str());
+    let file = fs::read_to_string("resources/services.yaml")
+        .expect("service.yaml should be in the resources directory");
+    let commands = serde_yaml::from_str::<BTreeMap<String, String>>(&file)
+        .expect("service.yaml should be correctly formatted");
     let mut services = Vec::new();
-    for service in yaml_services {
-        match service {
-            (name, ServiceYamlForms::Command(command)) => {
-                services.push(Service::new(name,command,1));
-            }
-            (name, ServiceYamlForms::Full(service)) => {
-                services.push(Service::new(name, service.command,service.multiplier));
-            }
-        };
+    for (name, command) in commands {
+        services.push(Service::new(name, command));
     }
     services
 }
@@ -325,8 +305,4 @@ async fn score_teams(config: &mut Config) {
             });
         }
     }
-}
-
-pub fn resource_location() -> String {
-    std::env::var("SB_RESOURCE_DIR").unwrap_or_else(|_| "resources".to_string())
 }

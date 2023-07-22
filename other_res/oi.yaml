@@ -1,6 +1,0 @@
-hello:
-  markdown: |
-    # Hello
-    this is my first inject.
-    Please be nice
-    [Click This!]({{SB_URL}}/downloads/hello.csv)
