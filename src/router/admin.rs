@@ -10,7 +10,7 @@ use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    checker::{passwords, saves, injects, Config, ConfigError, Service, TeamError},
+    checker::{passwords, saves, injects, Config, config::ConfigError, Service, TeamError},
     checker::injects::InjectUser,
     ConfigState,
 };

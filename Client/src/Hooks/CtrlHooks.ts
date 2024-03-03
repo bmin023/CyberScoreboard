@@ -20,6 +20,7 @@ import {
 } from "../types";
 
 const SCORE_REFETCH = 5000;
+const INJECT_REFETCH = 60000;
 
 export const useScore = () => {
     const { data, error, isLoading, dataUpdatedAt } = useQuery(
@@ -548,6 +549,9 @@ export const useTeamInjects = (team: string | undefined) => {
         async () => {
             const res = await axios.get(`/team/${team}/injects`);
             return res.data;
+        },
+        {
+            refetchInterval: INJECT_REFETCH
         }
     );
     return {

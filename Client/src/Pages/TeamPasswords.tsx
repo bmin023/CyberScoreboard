@@ -54,7 +54,7 @@ const TeamPasswords = () => {
           </p>
           <select
             name="group"
-            className="text-center bg-slate-100 dark:bg-zinc-600 text-xl font-medium w-24 h-10 rounded shadow"
+            className="text-center bg-slate-100 dark:bg-zinc-600 text-xl font-medium h-10 rounded shadow"
           >
             {groups.map((group) => (
               <option className="appearance-none" key={group} value={group}>

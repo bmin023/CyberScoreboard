@@ -7,7 +7,9 @@ use markdown::to_html;
 use serde::{Deserialize, Serialize};
 use tracing::{debug, error, info};
 
-use super::{Config, ConfigError, Service};
+use crate::checker::resource_location;
+
+use super::{Config, config::ConfigError, Service};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Inject {
@@ -20,8 +22,14 @@ pub struct Inject {
     pub duration: u32,
     pub side_effects: Vec<SideEffect>,
     pub completed: bool,
+    /// If empty, no file types are allowed. If None, All file types
+    /// are allowed.
     pub file_type: Option<Vec<String>>,
     pub sticky: bool,
+}
+
+fn team_inject_dir(team_name: &str) -> String {
+    format!("{}/injects/{}", resource_location(), team_name)
 }
 
 impl Inject {
@@ -44,6 +52,13 @@ impl Inject {
     pub fn is_ended(&self, minutes_since_start: u32) -> bool {
         minutes_since_start >= self.start + self.duration
     }
+    pub fn requires_response(&self) -> bool {
+        if let Some(f) = &self.file_type {
+            !f.is_empty()
+        } else {
+            true
+        }
+    }
     fn from_yaml(name: String, yaml: YAMLInject) -> Self {
         Self {
             uuid: Uuid::new_v4(),
@@ -64,7 +79,7 @@ impl Inject {
     fn format_name(&self) -> String {
         self.name.replace(" ", "_")
     }
-    /// Creates a new file in at resources/injects/<team_name>/filename
+    /// Creates a new file in resources/injects/<team_name>/filename
     /// Then sends back an artifact that the team did in fact submit.
     pub fn new_response(
         &self,
@@ -73,7 +88,7 @@ impl Inject {
         data: &[u8],
     ) -> Result<InjectResponse, ResponseError> {
         // check if folder exists
-        let path = format!("resources/injects/{}", team_name);
+        let path = team_inject_dir(team_name);
         fs::create_dir_all(path).map_err(|_| ResponseError::FileError)?;
         let extension = match filename.split(".").last() {
             Some(ext) => format!(".{}", ext),
@@ -84,7 +99,7 @@ impl Inject {
         } else {
             format!("{}_response{}", self.format_name(), extension)
         };
-        let path = format!("resources/injects/{}/{}", team_name, new_filename);
+        let path = format!("{}/{}", team_inject_dir(team_name), new_filename);
         let mut file = fs::File::create(path).map_err(|_| ResponseError::FileError)?;
         file.write_all(data).map_err(|_| ResponseError::FileError)?;
         let time = SystemTime::now()
@@ -118,11 +133,12 @@ pub enum ResponseError {
 }
 
 pub fn load_injects() -> Vec<Inject> {
-    let Ok(file) = fs::read_to_string("resources/injects.yaml") else {
+    let inject_file = std::env::var("SB_INJECTS").unwrap_or("injects.yaml".to_string());
+    let Ok(file) = fs::read_to_string(format!("{}/{}", resource_location(), inject_file)) else {
         return Vec::new();
     };
     let yaml_tree: BTreeMap<String, YAMLInject> =
-        serde_yaml::from_str(&file).expect("injects.yaml is not valid");
+        serde_yaml::from_str(&file).expect(format!("{} is not valid", inject_file).as_str());
     let injects: Vec<Inject> = yaml_tree
         .into_iter()
         .map(|(name, inject)| Inject::from_yaml(name, inject))
@@ -246,22 +262,13 @@ impl InjectUser for Config {
     fn get_injects_for_team(&self, team: &str) -> Result<Vec<Inject>, ConfigError> {
         let team = self.teams.get(team).ok_or(ConfigError::DoesNotExist)?;
         let time = (self.run_time().as_secs() / 60) as u32;
-        // not active && not completed -> false
-        // completed && submitted -> false
-        // completed && !submitted -> true
-        // not completed -> true
         Ok(self
             .injects
             .iter()
-            .filter(|i| i.is_active(time) || i.completed || i.sticky)
             .filter(|i| {
-                !(team
-                    .inject_responses
-                    .iter()
-                    .find(|res| res.inject_uuid == i.uuid)
-                    .is_some()
-                    && i.completed)
-                    || i.sticky
+                i.is_active(time)
+                    || (i.sticky && i.is_ended(time))
+                    || (i.requires_response() && !team.has_response(i.uuid))
             })
             .cloned()
             .collect())
@@ -296,7 +303,6 @@ impl InjectUser for Config {
     }
 }
 
-// tests for html
 #[cfg(test)]
 mod tests {
     use super::*;

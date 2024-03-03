@@ -1,22 +1,13 @@
 use std::{
-    collections::{BTreeMap, VecDeque},
-    time::Duration,
+    collections::BTreeMap, fs, time::Duration
 };
 
 use tokio::{process::Command, time::timeout};
 
 use serde::{Deserialize, Serialize};
 use tracing::debug;
-use uuid::Uuid;
 
-use super::inject::InjectResponse;
-
-#[derive(Serialize, Deserialize, Clone, Default, Debug)]
-pub struct Score {
-    pub score: u32,
-    pub up: bool,
-    pub history: VecDeque<bool>,
-}
+use super::resource_location;
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Service {
@@ -26,15 +17,15 @@ pub struct Service {
 }
 
 impl Service {
-    pub fn new(name: String, command: String) -> Self {
+    pub fn new(name: String, command: String, multiplier: u8) -> Self {
         Service {
             name,
             command,
-            multiplier: 1,
+            multiplier,
         }
     }
     pub fn is_valid(&self) -> bool {
-        return self.name != "" && self.command != "";
+        self.name != "" && self.command != ""
     }
     #[tracing::instrument]
     pub async fn check_with_env(&self, env: &Vec<(String, String)>) -> Result<TestOutput, ()> {
@@ -80,27 +71,34 @@ pub struct TestOutput {
     pub error: String,
 }
 
-#[derive(Serialize, Deserialize, Clone, Debug)]
-pub struct Team {
-    pub scores: BTreeMap<String, Score>,
-    pub env: Vec<(String, String)>,
-    pub inject_responses: Vec<InjectResponse>,
+#[derive(Deserialize)]
+struct ServiceYaml {
+    command: String,
+    multiplier: u8,
+}
+#[derive(Deserialize)]
+#[serde(untagged)]
+enum ServiceYamlForms {
+    Command(String),
+    Full(ServiceYaml),
 }
 
-impl Team {
-    pub fn score(&self) -> u32 {
-        self.scores.iter().map(|(_, s)| s.score).sum()
+pub fn load_services() -> Vec<Service> {
+    let service_file = std::env::var("SB_SERVICES").unwrap_or_else(|_| "services.yaml".to_owned());
+    let file = fs::read_to_string(format!("{}/{}", resource_location(), service_file))
+        .expect(format!("{} should be in the resources directory", service_file).as_str());
+    let yaml_services = serde_yaml::from_str::<BTreeMap<String, ServiceYamlForms>>(&file)
+        .expect(format!("{} should be formatted correctly", service_file).as_str());
+    let mut services = Vec::new();
+    for service in yaml_services {
+        match service {
+            (name, ServiceYamlForms::Command(command)) => {
+                services.push(Service::new(name, command, 1));
+            }
+            (name, ServiceYamlForms::Full(service)) => {
+                services.push(Service::new(name, service.command, service.multiplier));
+            }
+        };
     }
-    pub fn get_reponses(&self, inject_uuid: Uuid) -> Vec<InjectResponse> {
-        self.inject_responses
-            .iter()
-            .filter(|r| r.inject_uuid == inject_uuid)
-            .cloned()
-            .collect()
-    }
-}
-
-pub enum TeamError {
-    InvalidName,
-    AlreadyExists,
+    services
 }
