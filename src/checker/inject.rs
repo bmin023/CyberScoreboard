@@ -266,9 +266,7 @@ impl InjectUser for Config {
             .injects
             .iter()
             .filter(|i| {
-                i.is_active(time)
-                    || (i.sticky && i.is_ended(time))
-                    || (i.requires_response() && !team.has_response(i.uuid))
+                i.is_active(time) || (i.is_ended(time) && (i.sticky || (i.requires_response() && !team.has_response(i.uuid))))
             })
             .cloned()
             .collect())
