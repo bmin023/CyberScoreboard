@@ -66,15 +66,7 @@ impl Config {
         }
         self.teams.insert(
             name.clone(),
-            Team {
-                scores: self
-                    .services
-                    .iter()
-                    .map(|s| (s.name.to_owned(), Score::default()))
-                    .collect(),
-                env: vec![],
-                inject_responses: vec![],
-            },
+            Team::from_services(&self.services),
         );
         validate_password_fs(self);
         Ok(())
@@ -154,6 +146,10 @@ impl Config {
             }
         }
         Ok(())
+    }
+
+    pub fn get_team_with_password(&self,team: &String, password: &String) -> Option<&Team> {
+        self.teams.get(team).map_or_else(|| None, |v| if v.check_passwd(password) { Some(v) } else { None })
     }
     /// Because there can technically be multiple sources of truth for the config,
     /// this function will combine the two configs together, with this config

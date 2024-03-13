@@ -251,7 +251,8 @@ async fn edit_team(
     if config.teams.contains_key(&payload.name) {
         return StatusCode::CONFLICT;
     }
-    if let Some(team) = config.teams.remove(&team_name) {
+    if let Some(mut team) = config.teams.remove(&team_name) {
+        team.set_name(payload.name.clone());
         config.teams.insert(payload.name, team);
         StatusCode::OK
     } else {

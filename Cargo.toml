@@ -7,8 +7,10 @@ repository = "https://github.com/bmin023/CyberScoreboard"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [dependencies]
+async-trait = "0.1.77"
 axum = { version = "0.6.1", features = ["multipart"] }
 axum-extra = { version = "0.4.2", features = ["spa"] }
+axum-login = "0.13.1"
 handlebars = "4.3.7"
 markdown = "0.3.0"
 regex = "1.7.0"

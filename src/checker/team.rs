@@ -1,5 +1,9 @@
-use std::{collections::{BTreeMap, VecDeque}, fs};
+use std::{
+    collections::{BTreeMap, VecDeque},
+    fs,
+};
 
+use axum_login::AuthUser;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -7,12 +11,26 @@ use super::{injects::InjectResponse, resource_location, Service};
 
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct Team {
+    pub name: String,
+    pub id: Uuid,
     pub scores: BTreeMap<String, Score>,
     pub env: Vec<(String, String)>,
     pub inject_responses: Vec<InjectResponse>,
 }
 
 impl Team {
+    pub fn from_services(services: &Vec<Service>) -> Self {
+        Self {
+            name: String::new(),
+            id: Uuid::new_v4(),
+            scores: services
+                .iter()
+                .map(|s| (s.name.to_owned(), Score::default()))
+                .collect(),
+            env: vec![],
+            inject_responses: vec![],
+        }
+    }
     pub fn score(&self) -> u32 {
         self.scores.iter().map(|(_, s)| s.score).sum()
     }
@@ -24,7 +42,18 @@ impl Team {
             .collect()
     }
     pub fn has_response(&self, inject_uuid: Uuid) -> bool {
-        self.inject_responses.iter().any(|r| r.inject_uuid == inject_uuid)
+        self.inject_responses
+            .iter()
+            .any(|r| r.inject_uuid == inject_uuid)
+    }
+    pub fn check_passwd(&self, password: &String) -> bool {
+        self.env
+            .iter()
+            .find(|(k, v)| k == "TEAM_PASSWORD" && v == password)
+            .is_some()
+    }
+    pub fn set_name(&mut self, name: String) {
+        self.name = name;
     }
 }
 
@@ -56,6 +85,8 @@ pub fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
             (
                 name.clone(),
                 Team {
+                    name: name.clone(),
+                    id: Uuid::new_v4(),
                     scores: services
                         .iter()
                         .map(|s| (s.name.to_owned(), Score::default()))
@@ -67,4 +98,16 @@ pub fn load_teams(services: &Vec<Service>) -> BTreeMap<String, Team> {
         })
         .collect::<BTreeMap<String, Team>>();
     teams
+}
+
+impl AuthUser for Team {
+    type Id = Uuid;
+
+    fn id(&self) -> Self::Id {
+        self.id
+    }
+
+    fn session_auth_hash(&self) -> &[u8] {
+        self.id.as_bytes()
+    }
 }
