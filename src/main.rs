@@ -68,10 +68,12 @@ async fn main() {
         .allow_methods(Any)
         .allow_headers(Any);
 
+    let app_dir = std::env::var("SB_APP_DIR").unwrap_or_else(|_| "public".to_string());
+
     let app = Router::new()
         .nest_service("/downloads", download_dir)
         .nest("/api", router::main_router())
-        .merge(SpaRouter::new("/assets", "./public/assets").index_file("../index.html"))
+        .merge(SpaRouter::new("/assets", format!("{}/assets/",app_dir)).index_file("../index.html"))
         .layer(cors)
         .layer(TraceLayer::new_for_http())
         .with_state(state);
