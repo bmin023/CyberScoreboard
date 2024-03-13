@@ -51,7 +51,7 @@ async fn set_pw(
     }
 }
 
-#[tracing::instrument(skip(state, team, inject_uuid,multipart))]
+#[tracing::instrument(skip(state, team, inject_uuid, multipart))]
 async fn upload_inject_response(
     State(state): State<ConfigState>,
     Path((team, inject_uuid)): Path<(String, Uuid)>,
@@ -74,12 +74,17 @@ async fn upload_inject_response(
         return StatusCode::PAYLOAD_TOO_LARGE;
     }
     let mut config = state.write().await;
-    match config.submit_response(&team, inject_uuid, &filename, &data.unwrap()) {
-        Ok(_) => {
-            info!("{} submitted response for inject {}", team, inject_uuid);
-            StatusCode::OK
+    if let Ok(bytes) = data {
+        match config.submit_response(&team, inject_uuid, &filename, &bytes) {
+            Ok(_) => {
+                info!("{} submitted response for inject {}", team, inject_uuid);
+                StatusCode::OK
+            }
+            Err(_) => StatusCode::NOT_FOUND,
         }
-        Err(_) => StatusCode::NOT_FOUND,
+    } else {
+        error!("Error when decoding multipart response from team {}", team);
+        StatusCode::INTERNAL_SERVER_ERROR
     }
 }
 

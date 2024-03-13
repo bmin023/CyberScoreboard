@@ -1,12 +1,10 @@
 mod admin;
 mod team;
 
-use std::{fs::File, io::Write};
-
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Path, State},
     http::StatusCode,
-    routing::{get, post},
+    routing::get,
     Json, Router,
 };
 use serde::Serialize;
@@ -19,7 +17,6 @@ pub fn main_router() -> Router<ConfigState> {
         .nest("/team", team::team_router())
         .route("/scores", get(scores))
         .route("/scores/:team", get(team_scores))
-        .route("/upload", post(upload))
         .route("/time", get(time))
 }
 
@@ -102,17 +99,5 @@ async fn team_scores(
         Ok(Json(team_scores))
     } else {
         Err(StatusCode::NOT_FOUND)
-    }
-}
-
-async fn upload(mut multipart: Multipart) {
-    while let Some(field) = multipart.next_field().await.unwrap() {
-        let name = field.file_name().unwrap().to_string();
-        let data = field.bytes().await.unwrap();
-
-        println!("Length of `{}` is {} bytes", name, data.len());
-        // write to file!
-
-        File::create(name).unwrap().write(&data).unwrap();
     }
 }
