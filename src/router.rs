@@ -9,15 +9,31 @@ use axum::{
 };
 use serde::Serialize;
 
+use crate::auth::Auth;
+
+use axum_login::{
+    tower_sessions::{MemoryStore, SessionManagerLayer},
+    AuthManagerLayerBuilder
+};
+
 use crate::{checker::Score, ConfigState};
 
-pub fn main_router() -> Router<ConfigState> {
+pub type AuthSession = axum_login::AuthSession<Auth>;
+
+pub fn main_router(state: ConfigState) -> Router<ConfigState> {
+    let session_store = MemoryStore::default();
+    let session_layer = SessionManagerLayer::new(session_store);
+
+    let backend = Auth::default();
+    let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
+
     Router::new()
         .nest("/admin", admin::admin_router())
-        .nest("/team", team::team_router())
+        .nest("/team", team::team_router(state))
         .route("/scores", get(scores))
         .route("/scores/:team", get(team_scores))
         .route("/time", get(time))
+        .layer(auth_layer)
 }
 
 #[derive(Serialize)]

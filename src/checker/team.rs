@@ -46,6 +46,9 @@ impl Team {
             .iter()
             .any(|r| r.inject_uuid == inject_uuid)
     }
+    pub fn has_passwd(&self) -> bool {
+        self.env.iter().find(|(k,_)| k == "TEAM_PASSWORD").is_some()
+    }
     pub fn check_passwd(&self, password: &String) -> bool {
         self.env
             .iter()

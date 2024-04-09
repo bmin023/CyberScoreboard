@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use axum::{
-    extract::{Multipart, Path, State},
+    extract::{Multipart, Path, Request, State},
     http::StatusCode,
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
@@ -16,7 +20,40 @@ use crate::{
     ConfigState,
 };
 
-pub fn team_router() -> Router<ConfigState> {
+use super::AuthSession;
+
+async fn check_if_team(
+    Path(path): Path<HashMap<String, String>>,
+    State(state): State<ConfigState>,
+    mut auth: AuthSession,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let Some(team_name) = path.get("team") else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    let name_matches = if let Some(user) = &auth.user {
+        &user.1.clone() == team_name
+    } else {
+        false
+    };
+    if auth.user.is_none() || !name_matches {
+        let config = state.read().await;
+        let Some(team) = config.teams.get(team_name) else {
+            return Err(StatusCode::NOT_FOUND);
+        };
+        if team.has_passwd() {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        if auth.login(&team.into()).await.is_err() {
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+    let response = next.run(request).await;
+    Ok(response)
+}
+
+pub fn team_router(state: ConfigState) -> Router<ConfigState> {
     Router::new()
         .route("/:team/passwords", get(get_team_pw))
         .route("/:team/passwords/:group", post(set_pw))
@@ -26,6 +63,7 @@ pub fn team_router() -> Router<ConfigState> {
         )
         .route("/:team/injects", get(get_injects))
         .route("/:team/injects/:inject_uuid", get(get_inject))
+        .layer(middleware::from_fn_with_state(state, check_if_team))
 }
 
 async fn get_team_pw(Path(team): Path<String>) -> Result<Json<Vec<String>>, StatusCode> {

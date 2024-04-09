@@ -6,12 +6,12 @@ use std::collections::HashMap;
 use uuid::Uuid;
 
 #[derive(Clone, Default)]
-struct Auth {
+pub struct Auth {
     users: HashMap<Uuid, TeamUser>,
 }
 
 #[derive(Debug, Clone)]
-struct TeamUser(Uuid,String);
+pub struct TeamUser(pub Uuid,pub String);
 
 impl AuthUser for TeamUser {
     type Id = Uuid;
@@ -32,7 +32,7 @@ impl From<&Team> for TeamUser {
 }
 
 #[derive(Clone)]
-struct TeamCredentials {
+pub struct TeamCredentials {
     config: ConfigState,
     name: String,
     password: String,
