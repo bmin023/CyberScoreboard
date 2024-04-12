@@ -33,11 +33,11 @@ async fn check_if_team(
         return Err(StatusCode::INTERNAL_SERVER_ERROR);
     };
     let name_matches = if let Some(user) = &auth.user {
-        &user.1.clone() == team_name
+        &user.1.clone() == team_name || user.is_admin()
     } else {
         false
     };
-    if auth.user.is_none() || !name_matches {
+    if !name_matches {
         let config = state.read().await;
         let Some(team) = config.teams.get(team_name) else {
             return Err(StatusCode::NOT_FOUND);

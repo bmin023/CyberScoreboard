@@ -1,5 +1,5 @@
 use super::checker::Team;
-use crate::ConfigState;
+use crate::{checker::Config, ConfigState};
 use async_trait::async_trait;
 use axum_login::*;
 use std::collections::HashMap;
@@ -12,6 +12,20 @@ pub struct Auth {
 
 #[derive(Debug, Clone)]
 pub struct TeamUser(pub Uuid,pub String);
+
+static ADMIN_ID: Uuid = Uuid::from_u128(0x14298410567319418293721489124109);
+
+impl TeamUser {
+    pub fn admin() -> Self {
+        TeamUser(
+            ADMIN_ID,
+            "admin".to_string()
+        )
+    }
+    pub fn is_admin(&self) -> bool {
+        self.0 == ADMIN_ID
+    }
+}
 
 impl AuthUser for TeamUser {
     type Id = Uuid;
@@ -33,9 +47,9 @@ impl From<&Team> for TeamUser {
 
 #[derive(Clone)]
 pub struct TeamCredentials {
-    config: ConfigState,
-    name: String,
-    password: String,
+    pub config: ConfigState,
+    pub name: String,
+    pub password: String,
 }
 
 #[async_trait]
@@ -48,6 +62,12 @@ impl AuthnBackend for Auth {
         &self,
         creds: Self::Credentials,
     ) -> Result<Option<Self::User>, Self::Error> {
+        if creds.name == "admin" {
+            if Config::check_admin_password(&creds.password) {
+                return Ok(Some(TeamUser::admin()));
+            }
+            return Ok(None);
+        }
         let conf = creds.config.read().await;
         Ok(conf
             .get_team_with_password(&creds.name, &creds.password)

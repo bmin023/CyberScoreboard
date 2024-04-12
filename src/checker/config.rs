@@ -161,14 +161,12 @@ impl Config {
             self.teams.entry(team_name).and_modify(|team| {
                 for (new_score_name, new_score) in other_team.scores {
                     if team.scores.contains_key(&new_score_name)
-                    // || !self.to_delete.contains(&new_score_name)
                     {
                         team.scores.insert(new_score_name, new_score);
                     }
                 }
             });
         }
-        // self.to_delete.clear();
         // update injects
         for inject in other.injects {
             if let Some(index) = self.injects.iter().position(|i| i.uuid == inject.uuid) {
@@ -183,6 +181,15 @@ impl Config {
                     inject.name
                 );
             }
+        }
+    }
+    pub fn has_admin_password() -> bool {
+        std::env::var("SB_ADMIN_PASSWORD").is_ok()
+    }
+    pub fn check_admin_password(password: &String) -> bool {
+        match std::env::var("SB_ADMIN_PASSWORD") {
+            Ok(admin_password) => password == &admin_password,
+            Err(_) => false,
         }
     }
 }

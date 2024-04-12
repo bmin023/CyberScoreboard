@@ -4,16 +4,16 @@ mod team;
 use axum::{
     extract::{Path, State},
     http::StatusCode,
-    routing::get,
+    routing::{get, post},
     Json, Router,
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 
-use crate::auth::Auth;
+use crate::auth::{Auth, TeamCredentials};
 
 use axum_login::{
     tower_sessions::{MemoryStore, SessionManagerLayer},
-    AuthManagerLayerBuilder
+    AuthManagerLayerBuilder,
 };
 
 use crate::{checker::Score, ConfigState};
@@ -33,6 +33,7 @@ pub fn main_router(state: ConfigState) -> Router<ConfigState> {
         .route("/scores", get(scores))
         .route("/scores/:team", get(team_scores))
         .route("/time", get(time))
+        .route("/login", post(login))
         .layer(auth_layer)
 }
 
@@ -115,5 +116,30 @@ async fn team_scores(
         Ok(Json(team_scores))
     } else {
         Err(StatusCode::NOT_FOUND)
+    }
+}
+
+#[derive(Deserialize)]
+struct LoginPayload {
+    username: String,
+    password: String,
+}
+
+async fn login(
+    mut auth: AuthSession,
+    State(state): State<ConfigState>,
+    Json(payload): Json<LoginPayload>,
+) -> Result<StatusCode,StatusCode> {
+    let config = state;
+    let creds = TeamCredentials {
+        config,
+        name: payload.username,
+        password: payload.password,
+    };
+    if let Ok(Some(user)) = auth.authenticate(creds).await {
+        auth.login(&user).await.map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?;
+        Ok(StatusCode::OK)
+    } else {
+        Err(StatusCode::UNAUTHORIZED)
     }
 }
