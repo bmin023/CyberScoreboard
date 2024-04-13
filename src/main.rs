@@ -1,17 +1,20 @@
+mod auth;
 mod checker;
 mod router;
 
+use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+use axum::http::{Method, StatusCode};
+use axum::routing::get_service;
 use axum::Router;
-use axum_extra::routing::SpaRouter;
 use checker::injects::InjectUser;
 use checker::Config;
-use tracing::field::debug;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time};
-use tower_http::cors::{Any, CorsLayer};
+use tower::ServiceBuilder;
+use tower_http::cors::CorsLayer;
+use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
-use tower_http::services::ServeDir;
-use tracing::{debug, debug_span, error, info, info_span};
+use tracing::{debug, debug_span, error, info};
 use tracing_subscriber::{layer::SubscriberExt, util::SubscriberInitExt};
 
 use crate::checker::resource_location;
@@ -61,28 +64,45 @@ async fn main() {
             }
         }
     });
-    let download_dir = ServeDir::new(format!("{}/downloads",resource_location()));
+    let download_dir = ServeDir::new(format!("{}/downloads", resource_location()));
+
+    let origins = [
+        "http://localhost:8000".parse().unwrap(),
+        "http://localhost:3000".parse().unwrap(),
+        "http://localhost:3000/".parse().unwrap(),
+        "localhost".parse().unwrap(),
+    ];
 
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_credentials(true)
+        .allow_origin(origins)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::DELETE,
+            Method::PUT,
+            Method::PATCH,
+        ])
+        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let app_dir = std::env::var("SB_APP_DIR").unwrap_or_else(|_| "public".to_string());
 
     let app = Router::new()
+        .nest("/api", router::main_router(state.clone()))
         .nest_service("/downloads", download_dir)
-        .nest("/api", router::main_router())
-        .merge(SpaRouter::new("/assets", format!("{}/assets/",app_dir)).index_file("../index.html"))
+        .nest_service("/assets", get_service(ServeDir::new(format!("{}/assets/", app_dir))))
+        .fallback_service(
+            get_service(ServeFile::new(format!("{}/index.html",app_dir))).handle_error(|_| async move {
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
+            }),
+        )
+        .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()))
         .layer(cors)
-        .layer(TraceLayer::new_for_http())
         .with_state(state);
     let port = std::env::var("SB_PORT").unwrap_or_else(|_| "8000".to_string());
     let addr = SocketAddr::from(([127, 0, 0, 1], port.parse::<u16>().expect("Invalid Port")));
 
     info!("Listening on http://{}", addr);
-    axum::Server::bind(&addr)
-        .serve(app.into_make_service())
-        .await
-        .unwrap();
+    let listener = tokio::net::TcpListener::bind(&addr).await.unwrap();
+    let _ = axum::serve(listener, app).await.unwrap();
 }

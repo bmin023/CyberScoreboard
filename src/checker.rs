@@ -18,6 +18,8 @@ pub mod injects {
     pub use super::inject::{CreateInject, Inject, InjectResponse, InjectUser};
 }
 
+use serde::Serialize;
+
 pub use self::config::Config;
 pub use self::{
     service::Service,
@@ -27,4 +29,17 @@ pub use self::{
 
 pub fn resource_location() -> String {
     std::env::var("SB_RESOURCE_DIR").unwrap_or_else(|_| "resources".to_string())
+}
+
+#[derive(Serialize)]
+pub struct ScoreboardInfo {
+    pub version: String
+}
+
+impl Default for ScoreboardInfo {
+    fn default() -> Self {
+        Self {
+            version: env!("CARGO_PKG_VERSION").to_string()
+        }
+    }
 }

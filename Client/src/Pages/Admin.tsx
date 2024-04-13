@@ -6,6 +6,7 @@ import Saves from "../Components/Admin/Saves";
 import Controls from "../Components/Admin/Controls";
 import Services from "../Components/Admin/Services";
 import Injects from "../Components/Admin/Injects";
+import { Link } from "react-router-dom";
 
 
 const AdminPage = () => {
@@ -24,6 +25,7 @@ const AdminPage = () => {
         );
     return (
         <div className="py-1 bg-slate-100 h-screen dark:bg-zinc-900 dark:text-zinc-100">
+            <Link className="underline m-1" to="/">Back Home</Link>
             <h1 className="text-4xl text-center font-bold">Admin Page</h1>
             <Controls active={info.active} />
             <Services />

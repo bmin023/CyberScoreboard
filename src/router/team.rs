@@ -1,6 +1,10 @@
+use std::collections::HashMap;
+
 use axum::{
-    extract::{Multipart, Path, State},
-    http::StatusCode,
+    extract::{Multipart, Path, Request, State},
+    http::{Method, StatusCode},
+    middleware::{self, Next},
+    response::Response,
     routing::{get, post},
     Json, Router,
 };
@@ -11,12 +15,45 @@ use uuid::Uuid;
 use crate::{
     checker::{
         injects::{Inject, InjectResponse, InjectUser},
-        passwords::{get_password_groups, overwrite_passwords},
+        passwords::{get_password_groups, overwrite_passwords}, Score,
     },
     ConfigState,
 };
 
-pub fn team_router() -> Router<ConfigState> {
+use super::AuthSession;
+
+async fn check_if_team(
+    Path(path): Path<HashMap<String, String>>,
+    State(state): State<ConfigState>,
+    mut auth: AuthSession,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let Some(team_name) = path.get("team") else {
+        return Err(StatusCode::INTERNAL_SERVER_ERROR);
+    };
+    let name_matches = if let Some(user) = &auth.user {
+        &user.1.clone() == team_name || user.is_admin()
+    } else {
+        false
+    };
+    if !name_matches {
+        let config = state.read().await;
+        let Some(team) = config.teams.get(team_name) else {
+            return Err(StatusCode::NOT_FOUND);
+        };
+        if team.has_passwd() {
+            return Err(StatusCode::UNAUTHORIZED);
+        }
+        if auth.user.is_none() && auth.login(&team.into()).await.is_err() {
+            return Err(StatusCode::INTERNAL_SERVER_ERROR);
+        }
+    }
+    let response = next.run(request).await;
+    Ok(response)
+}
+
+pub fn team_router(state: ConfigState) -> Router<ConfigState> {
     Router::new()
         .route("/:team/passwords", get(get_team_pw))
         .route("/:team/passwords/:group", post(set_pw))
@@ -26,6 +63,42 @@ pub fn team_router() -> Router<ConfigState> {
         )
         .route("/:team/injects", get(get_injects))
         .route("/:team/injects/:inject_uuid", get(get_inject))
+        .route("/:team/scores", get(team_scores))
+        .layer(middleware::from_fn_with_state(state, check_if_team))
+}
+
+#[derive(Serialize)]
+struct TeamScores {
+    services: Vec<String>,
+    scores: Vec<Score>,
+}
+
+async fn team_scores(
+    State(state): State<ConfigState>,
+    Path(team): Path<String>,
+) -> Result<Json<TeamScores>, StatusCode> {
+    let config = state.read().await;
+    if let Some(team) = config.teams.get(&team) {
+        let team_scores = config.services.iter().fold(
+            TeamScores {
+                services: Vec::new(),
+                scores: Vec::new(),
+            },
+            |mut acc, s| {
+                acc.services.push(s.name.clone());
+                acc.scores.push(
+                    team.scores
+                        .get(&s.name)
+                        .unwrap_or(&Score::default())
+                        .clone(),
+                );
+                acc
+            },
+        );
+        Ok(Json(team_scores))
+    } else {
+        Err(StatusCode::NOT_FOUND)
+    }
 }
 
 async fn get_team_pw(Path(team): Path<String>) -> Result<Json<Vec<String>>, StatusCode> {

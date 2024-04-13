@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use std::collections::BTreeMap;
 use tracing::error;
 
@@ -66,15 +67,7 @@ impl Config {
         }
         self.teams.insert(
             name.clone(),
-            Team {
-                scores: self
-                    .services
-                    .iter()
-                    .map(|s| (s.name.to_owned(), Score::default()))
-                    .collect(),
-                env: vec![],
-                inject_responses: vec![],
-            },
+            Team::from_services(&self.services),
         );
         validate_password_fs(self);
         Ok(())
@@ -155,6 +148,13 @@ impl Config {
         }
         Ok(())
     }
+
+    pub fn get_team_with_password(&self,team: &String, password: &String) -> Option<&Team> {
+        self.teams.get(team).map_or_else(|| None, |v| if v.check_passwd(password) { Some(v) } else { None })
+    }
+    pub fn get_team_with_id(&self, team: &Uuid) -> Option<&Team> {
+        self.teams.values().find(|t| &t.id == team)
+    }
     /// Because there can technically be multiple sources of truth for the config,
     /// this function will combine the two configs together, with this config
     /// taking precedence. The other config will try and update this one while respecting
@@ -165,14 +165,12 @@ impl Config {
             self.teams.entry(team_name).and_modify(|team| {
                 for (new_score_name, new_score) in other_team.scores {
                     if team.scores.contains_key(&new_score_name)
-                    // || !self.to_delete.contains(&new_score_name)
                     {
                         team.scores.insert(new_score_name, new_score);
                     }
                 }
             });
         }
-        // self.to_delete.clear();
         // update injects
         for inject in other.injects {
             if let Some(index) = self.injects.iter().position(|i| i.uuid == inject.uuid) {
@@ -187,6 +185,15 @@ impl Config {
                     inject.name
                 );
             }
+        }
+    }
+    pub fn has_admin_password() -> bool {
+        std::env::var("SB_ADMIN_PASSWORD").is_ok()
+    }
+    pub fn check_admin_password(password: &String) -> bool {
+        match std::env::var("SB_ADMIN_PASSWORD") {
+            Ok(admin_password) => password == &admin_password,
+            Err(_) => false,
         }
     }
 }

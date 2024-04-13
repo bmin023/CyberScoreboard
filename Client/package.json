@@ -8,7 +8,9 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@openpgp/web-stream-tools": "^0.0.11-patch-0",
     "axios": "0.25.0",
+    "openpgp": "^5.11.1",
     "react": "^18.0.0",
     "react-dom": "^18.0.0",
     "react-icons": "^4.4.0",
