@@ -18,7 +18,7 @@ async fn check_if_admin(
     next: Next,
 ) -> Result<Response, StatusCode> {
     let good_user = if let Some(user) = &auth.user {
-        user.is_admin()
+        user.is_admin() || !Config::has_admin_password()
     } else {
         if Config::has_admin_password() {
             false

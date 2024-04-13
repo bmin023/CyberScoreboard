@@ -90,7 +90,7 @@ async fn main() {
     let app = Router::new()
         .nest("/api", router::main_router(state.clone()))
         .nest_service("/downloads", download_dir)
-        .nest_service("/assets", get_service(ServeDir::new(format!("{}/assets", app_dir))))
+        .nest_service("/assets", get_service(ServeDir::new(format!("{}/assets/", app_dir))))
         .fallback_service(
             get_service(ServeFile::new(format!("{}/index.html",app_dir))).handle_error(|_| async move {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
