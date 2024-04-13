@@ -1,4 +1,5 @@
 use serde::{Deserialize, Serialize};
+use uuid::Uuid;
 use std::collections::BTreeMap;
 use tracing::error;
 
@@ -150,6 +151,9 @@ impl Config {
 
     pub fn get_team_with_password(&self,team: &String, password: &String) -> Option<&Team> {
         self.teams.get(team).map_or_else(|| None, |v| if v.check_passwd(password) { Some(v) } else { None })
+    }
+    pub fn get_team_with_id(&self, team: &Uuid) -> Option<&Team> {
+        self.teams.values().find(|t| &t.id == team)
     }
     /// Because there can technically be multiple sources of truth for the config,
     /// this function will combine the two configs together, with this config

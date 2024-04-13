@@ -1,5 +1,8 @@
 import axios from "axios";
+import { config } from "openpgp";
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "react-query";
+import { useNavigate, useLocation } from "react-router-dom";
 import {
     AdminInfo,
     CreateInject,
@@ -22,6 +25,17 @@ import {
 const SCORE_REFETCH = 5000;
 const INJECT_REFETCH = 60000;
 
+export const useScoreboardInfo = () => {
+  const { data, isLoading } = useQuery("scoreboardinfo", async () => {
+    const res = await axios.get("/info");
+    return res.data
+  })
+  return {
+    info: data,
+    infoLoading: isLoading
+  }
+}
+
 export const useScore = () => {
     const { data, error, isLoading, dataUpdatedAt } = useQuery(
         "scores",
@@ -42,6 +56,8 @@ export const useScore = () => {
 };
 
 export const useTeamScore = (teamName: string | undefined) => {
+    const navigate = useNavigate()
+    const location = useLocation()
     if (teamName === undefined) {
         return {
             data: {
@@ -56,12 +72,17 @@ export const useTeamScore = (teamName: string | undefined) => {
     const { data, error, isLoading, dataUpdatedAt } = useQuery(
         teamName + " scores",
         async () => {
-            const res = await axios.get("/scores/" + teamName);
+            const res = await axios.get(`/team/${teamName}/scores`);
             return res.data;
         },
         {
             refetchInterval: SCORE_REFETCH,
             retry: false,
+            onError: (err: any) => {
+              if(err.response.status === 401) {
+                navigate(`/login?user=${teamName}&redirect=${location.pathname}`)
+              }
+            }
         }
     );
     return {
@@ -73,11 +94,21 @@ export const useTeamScore = (teamName: string | undefined) => {
 };
 
 export const useAdminInfo = () => {
+    const navigate = useNavigate()
+    const location = useLocation()
     const { data, error, isLoading, dataUpdatedAt } = useQuery(
         "adminInfo",
         async () => {
             const res = await axios.get("/admin/config");
             return res.data;
+        },
+        {
+            retry: false,
+            onError: (err: any) => {
+              if(err.response.status === 401) {
+                navigate(`/login?user=admin&redirect=${location.pathname}`)
+              }
+            }
         }
     );
     return {
@@ -673,4 +704,15 @@ export const useAdminDeleteInject = () => {
     return {
         deleteInject: mutate as (uuid: string) => Promise<void>,
     };
+}
+
+export const useLogin = () => {
+  const { mutate, isError } = useMutation(async (data: any) => {
+    const res = await axios.post('/login', data)
+    return res.data
+  }) 
+  return {
+    login: mutate,
+    isLoginError: isError
+  }
 }

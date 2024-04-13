@@ -2,13 +2,21 @@ use super::checker::Team;
 use crate::{checker::Config, ConfigState};
 use async_trait::async_trait;
 use axum_login::*;
-use std::collections::HashMap;
 use uuid::Uuid;
 
-#[derive(Clone, Default)]
+#[derive(Clone)]
 pub struct Auth {
-    users: HashMap<Uuid, TeamUser>,
+    config: ConfigState,
 }
+
+impl Auth {
+    pub fn new(config: &ConfigState) -> Self {
+        Self {
+            config: config.clone()
+        }
+    }
+}
+
 
 #[derive(Debug, Clone)]
 pub struct TeamUser(pub Uuid,pub String);
@@ -24,6 +32,9 @@ impl TeamUser {
     }
     pub fn is_admin(&self) -> bool {
         self.0 == ADMIN_ID
+    }
+    pub fn is_admin_id(id: &Uuid) -> bool {
+        id == &ADMIN_ID
     }
 }
 
@@ -47,7 +58,6 @@ impl From<&Team> for TeamUser {
 
 #[derive(Clone)]
 pub struct TeamCredentials {
-    pub config: ConfigState,
     pub name: String,
     pub password: String,
 }
@@ -68,13 +78,16 @@ impl AuthnBackend for Auth {
             }
             return Ok(None);
         }
-        let conf = creds.config.read().await;
+        let conf = self.config.read().await;
         Ok(conf
             .get_team_with_password(&creds.name, &creds.password)
             .map(|t| t.into()))
     }
 
     async fn get_user(&self, user_id: &UserId<Self>) -> Result<Option<Self::User>, Self::Error> {
-        Ok(self.users.get(user_id).cloned())
+        if TeamUser::is_admin_id(user_id) {
+            return Ok(Some(TeamUser::admin()));
+        }
+        Ok(self.config.read().await.get_team_with_id(user_id).map(|t| t.into()))
     }
 }

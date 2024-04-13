@@ -2,7 +2,8 @@ mod auth;
 mod checker;
 mod router;
 
-use axum::http::StatusCode;
+use axum::http::header::{ACCEPT, AUTHORIZATION, CONTENT_TYPE};
+use axum::http::{Method, StatusCode};
 use axum::routing::get_service;
 use axum::Router;
 use checker::injects::InjectUser;
@@ -10,7 +11,7 @@ use checker::Config;
 use std::{net::SocketAddr, sync::Arc, time::Duration};
 use tokio::{sync::RwLock, time};
 use tower::ServiceBuilder;
-use tower_http::cors::{Any, CorsLayer};
+use tower_http::cors::CorsLayer;
 use tower_http::services::{ServeDir, ServeFile};
 use tower_http::trace::TraceLayer;
 use tracing::{debug, debug_span, error, info};
@@ -65,23 +66,33 @@ async fn main() {
     });
     let download_dir = ServeDir::new(format!("{}/downloads", resource_location()));
 
+    let origins = [
+        "http://localhost:8000".parse().unwrap(),
+        "http://localhost:3000".parse().unwrap(),
+        "http://localhost:3000/".parse().unwrap(),
+        "localhost".parse().unwrap(),
+    ];
+
     let cors = CorsLayer::new()
-        .allow_origin(Any)
-        .allow_methods(Any)
-        .allow_headers(Any);
+        .allow_credentials(true)
+        .allow_origin(origins)
+        .allow_methods([
+            Method::GET,
+            Method::POST,
+            Method::DELETE,
+            Method::PUT,
+            Method::PATCH,
+        ])
+        .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
     let app = Router::new()
         .nest("/api", router::main_router(state.clone()))
         .nest_service("/downloads", download_dir)
-        .nest_service(
-            "/assets",
-            get_service(ServeDir::new("./public/assets")
-            ),
-        )
+        .nest_service("/assets", get_service(ServeDir::new("./public/assets")))
         .fallback_service(
-            get_service(ServeFile::new("./public/index.html")).handle_error(
-                |_| async move { (StatusCode::INTERNAL_SERVER_ERROR, "internal server error") },
-            ),
+            get_service(ServeFile::new("./public/index.html")).handle_error(|_| async move {
+                (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
+            }),
         )
         .layer(ServiceBuilder::new().layer(TraceLayer::new_for_http()))
         .layer(cors)

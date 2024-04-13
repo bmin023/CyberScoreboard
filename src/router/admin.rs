@@ -1,19 +1,38 @@
 use std::time::{SystemTime, UNIX_EPOCH};
 
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
+    extract::{Path, Request, State}, http::StatusCode, middleware::{self, Next}, response::Response, routing::{get, post}, Json, Router
 };
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
 use crate::{
-    checker::{passwords, saves, injects, Config, config::ConfigError, Service, TeamError},
-    checker::injects::InjectUser,
-    ConfigState,
+    auth::TeamUser, checker::{config::ConfigError, injects::{self, InjectUser}, passwords, saves, Config, Service, TeamError}, ConfigState
 };
+
+use super::AuthSession;
+
+async fn check_if_admin(
+    mut auth: AuthSession,
+    request: Request,
+    next: Next,
+) -> Result<Response, StatusCode> {
+    let good_user = if let Some(user) = &auth.user {
+        user.is_admin()
+    } else {
+        if Config::has_admin_password() {
+            false
+        } else {
+            auth.login(&TeamUser::admin()).await.unwrap();
+            true
+        }
+    };
+    if !good_user {
+        return Err(StatusCode::UNAUTHORIZED);
+    }
+    let response = next.run(request).await;
+    Ok(response)
+}
 
 pub fn admin_router() -> Router<ConfigState> {
     Router::new()
@@ -39,6 +58,7 @@ pub fn admin_router() -> Router<ConfigState> {
         .route("/saves/load", post(load_save))
         .route("/injects", get(get_injects).post(add_inject))
         .route("/injects/:inject_uuid", post(edit_inject).delete(delete_inject))
+        .layer(middleware::from_fn(check_if_admin))
 }
 
 #[derive(Serialize)]

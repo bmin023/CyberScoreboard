@@ -2,14 +2,12 @@ mod admin;
 mod team;
 
 use axum::{
-    extract::{Path, State},
-    http::StatusCode,
-    routing::{get, post},
-    Json, Router,
+    extract::{Path, State}, http::StatusCode, response::{IntoResponse, Redirect}, routing::{get, post}, Json, Router
 };
 use serde::{Deserialize, Serialize};
+use tracing::info;
 
-use crate::auth::{Auth, TeamCredentials};
+use crate::{auth::{Auth, TeamCredentials}, checker::ScoreboardInfo};
 
 use axum_login::{
     tower_sessions::{MemoryStore, SessionManagerLayer},
@@ -24,16 +22,16 @@ pub fn main_router(state: ConfigState) -> Router<ConfigState> {
     let session_store = MemoryStore::default();
     let session_layer = SessionManagerLayer::new(session_store);
 
-    let backend = Auth::default();
+    let backend = Auth::new(&state);
     let auth_layer = AuthManagerLayerBuilder::new(backend, session_layer).build();
 
     Router::new()
         .nest("/admin", admin::admin_router())
         .nest("/team", team::team_router(state))
         .route("/scores", get(scores))
-        .route("/scores/:team", get(team_scores))
         .route("/time", get(time))
         .route("/login", post(login))
+        .route("/info", get(scoreboard_info))
         .layer(auth_layer)
 }
 
@@ -67,6 +65,10 @@ async fn time(State(state): State<ConfigState>) -> Json<TimeBody> {
     })
 }
 
+async fn scoreboard_info() -> Json<ScoreboardInfo> {
+    Json(ScoreboardInfo::default())
+}
+
 async fn scores(State(state): State<ConfigState>) -> Json<ScoreWrapper> {
     let config = state.read().await;
     let services = config.services.iter().map(|s| s.name.clone());
@@ -85,40 +87,6 @@ async fn scores(State(state): State<ConfigState>) -> Json<ScoreWrapper> {
     })
 }
 
-#[derive(Serialize)]
-struct TeamScores {
-    services: Vec<String>,
-    scores: Vec<Score>,
-}
-
-async fn team_scores(
-    State(state): State<ConfigState>,
-    Path(team): Path<String>,
-) -> Result<Json<TeamScores>, StatusCode> {
-    let config = state.read().await;
-    if let Some(team) = config.teams.get(&team) {
-        let team_scores = config.services.iter().fold(
-            TeamScores {
-                services: Vec::new(),
-                scores: Vec::new(),
-            },
-            |mut acc, s| {
-                acc.services.push(s.name.clone());
-                acc.scores.push(
-                    team.scores
-                        .get(&s.name)
-                        .unwrap_or(&Score::default())
-                        .clone(),
-                );
-                acc
-            },
-        );
-        Ok(Json(team_scores))
-    } else {
-        Err(StatusCode::NOT_FOUND)
-    }
-}
-
 #[derive(Deserialize)]
 struct LoginPayload {
     username: String,
@@ -127,12 +95,9 @@ struct LoginPayload {
 
 async fn login(
     mut auth: AuthSession,
-    State(state): State<ConfigState>,
     Json(payload): Json<LoginPayload>,
-) -> Result<StatusCode,StatusCode> {
-    let config = state;
+) -> Result<StatusCode, StatusCode> {
     let creds = TeamCredentials {
-        config,
         name: payload.username,
         password: payload.password,
     };

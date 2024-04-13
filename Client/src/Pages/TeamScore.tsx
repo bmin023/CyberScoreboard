@@ -1,3 +1,4 @@
+import { useEffect } from "react";
 import { Link, useParams } from "react-router-dom";
 import { useTeamInjects, useTeamScore, useTime } from "../Hooks/CtrlHooks";
 import { InjectDesc } from "../types";
@@ -121,6 +122,7 @@ const Injects = () => {
 const TeamScore = () => {
   const { teamName } = useParams();
   const { data, scoreLoading, scoreError } = useTeamScore(teamName);
+
   if (scoreLoading)
     return (
       <div className="bg-slate-100 h-screen dark:bg-zinc-900 dark:text-zinc-100">
