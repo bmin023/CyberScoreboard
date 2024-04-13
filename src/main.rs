@@ -85,12 +85,14 @@ async fn main() {
         ])
         .allow_headers([AUTHORIZATION, ACCEPT, CONTENT_TYPE]);
 
+    let app_dir = std::env::var("SB_APP_DIR").unwrap_or_else(|_| "public".to_string());
+
     let app = Router::new()
         .nest("/api", router::main_router(state.clone()))
         .nest_service("/downloads", download_dir)
-        .nest_service("/assets", get_service(ServeDir::new("./public/assets")))
+        .nest_service("/assets", get_service(ServeDir::new(format!("{}/assets", app_dir))))
         .fallback_service(
-            get_service(ServeFile::new("./public/index.html")).handle_error(|_| async move {
+            get_service(ServeFile::new(format!("{}/index.html",app_dir))).handle_error(|_| async move {
                 (StatusCode::INTERNAL_SERVER_ERROR, "internal server error")
             }),
         )

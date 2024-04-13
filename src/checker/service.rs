@@ -30,9 +30,10 @@ impl Service {
     #[tracing::instrument]
     pub async fn check_with_env(&self, env: &Vec<(String, String)>) -> Result<TestOutput, ()> {
         // get PATH from env
+        let resource_dir = resource_location();
         let path = std::env::var("PATH").unwrap_or("/usr/bin:/bin:/usr/sbin:/sbin".to_string());
         let output = Command::new("bash")
-            .current_dir("./resources")
+            .current_dir(resource_dir)
             .arg("-c")
             .arg(&self.command)
             .env_clear()
