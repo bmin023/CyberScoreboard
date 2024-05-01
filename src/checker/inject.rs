@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, fs, io::Write, time::SystemTime};
+use std::{collections::BTreeMap, fs, io::Write};
 use uuid::Uuid;
 
 use handlebars::Handlebars;
@@ -9,7 +9,11 @@ use tracing::{debug, error, info};
 
 use crate::checker::resource_location;
 
-use super::{Config, config::ConfigError, Service};
+use super::{
+    artifact::{Artifact, ArtifactBuilder},
+    config::ConfigError,
+    current_time, Config, Service,
+};
 
 #[derive(Clone, Serialize, Deserialize, Debug)]
 pub struct Inject {
@@ -89,30 +93,24 @@ impl Inject {
     ) -> Result<InjectResponse, ResponseError> {
         // check if folder exists
         let path = team_inject_dir(team_name);
-        fs::create_dir_all(path).map_err(|_| ResponseError::FileError)?;
-        let extension = match filename.split(".").last() {
-            Some(ext) => format!(".{}", ext),
-            None => "".to_string(),
-        };
         let new_filename = if self.completed {
-            format!("{}_late_response{}", self.format_name(), extension)
+            format!("{}_late_response", self.format_name())
         } else {
-            format!("{}_response{}", self.format_name(), extension)
+            format!("{}_response", self.format_name())
         };
-        let path = format!("{}/{}", team_inject_dir(team_name), new_filename);
-        let mut file = fs::File::create(path).map_err(|_| ResponseError::FileError)?;
-        file.write_all(data).map_err(|_| ResponseError::FileError)?;
-        let time = SystemTime::now()
-            .duration_since(SystemTime::UNIX_EPOCH)
-            .unwrap()
-            .as_millis();
+
+        let artifact = ArtifactBuilder::new()
+            .name(new_filename)
+            .original_name(filename.to_string())
+            .path(path)
+            .with_correct_ext()
+            .build(data)
+            .map_err(|_| ResponseError::FileError)?;
+
         Ok(InjectResponse {
-            uuid: Uuid::new_v4(),
             inject_uuid: self.uuid.clone(),
             late: self.completed,
-            filename: filename.to_string(),
-            upload_time: time,
-            name: self.name.clone(),
+            artifact,
         })
     }
     pub fn get_html(&self, env: &Vec<(String, String)>) -> String {
@@ -180,11 +178,8 @@ struct YAMLInject {
 #[derive(Serialize, Deserialize, Clone, Debug)]
 pub struct InjectResponse {
     pub inject_uuid: Uuid,
-    pub name: String,
-    pub uuid: Uuid,
     pub late: bool,
-    pub filename: String,
-    pub upload_time: u128,
+    pub artifact: Artifact,
 }
 
 #[derive(Deserialize, Clone, Debug)]
@@ -266,7 +261,9 @@ impl InjectUser for Config {
             .injects
             .iter()
             .filter(|i| {
-                i.is_active(time) || (i.is_ended(time) && (i.sticky || (i.requires_response() && !team.has_response(i.uuid))))
+                i.is_active(time)
+                    || (i.is_ended(time)
+                        && (i.sticky || (i.requires_response() && !team.has_response(i.uuid))))
             })
             .cloned()
             .collect())
